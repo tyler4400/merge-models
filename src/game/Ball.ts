@@ -126,7 +126,7 @@ export class Ball {
 
     const core = MeshBuilder.CreateSphere(
       `core-${this.id}`,
-      { diameter: def.radius * 2 * 0.78, segments: 24 },
+      { diameter: def.radius * 2 * 0.9, segments: 24 },
       scene,
     );
     core.parent = mesh;
@@ -135,13 +135,10 @@ export class Ball {
     core.isPickable = false;
     this.core = core;
 
-    const decal = MeshBuilder.CreateDecal(`face-${this.id}`, mesh, {
-      position: pos.add(new Vector3(0, 0, def.radius * 0.12)),
-      normal: new Vector3(0, 0, 1),
-      size: new Vector3(def.radius * 1.7, def.radius * 1.7, def.radius * 1.7),
-      cullBackFaces: false,
-    });
-    const dm = new StandardMaterial(`face-mat-${this.id}`, scene);
+    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.15 }, scene);
+    face.parent = mesh;
+    face.position.set(0, 0, def.radius * 0.86);
+    const dm = new StandardMaterial("face-mat-" + String(this.id), scene);
     const tex = iconTexture(scene, tier);
     dm.diffuseTexture = tex;
     dm.opacityTexture = tex;
@@ -151,10 +148,9 @@ export class Ball {
     dm.backFaceCulling = false;
     dm.useAlphaFromDiffuseTexture = true;
     dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-    decal.material = dm;
-    decal.isPickable = false;
-    decal.setParent(mesh);
-    this.face = decal;
+    face.material = dm;
+    face.isPickable = false;
+    this.face = face;
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
