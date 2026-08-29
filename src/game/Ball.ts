@@ -1,15 +1,13 @@
-/** Glass marble: tinted shell + inner core + logos as surface decals that roll with the ball. */
+/** Opaque unlit marble + inner core + rolling disc stickers (no PBR, no decals). */
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
-import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { PhysicsAggregate } from "@babylonjs/core/Physics/v2/physicsAggregate";
 import { PhysicsShapeType } from "@babylonjs/core/Physics/v2/IPhysicsEnginePlugin";
-import "@babylonjs/core/Materials/PBR/pbrSubSurfaceConfiguration";
-import "@babylonjs/core/Materials/PBR/pbrClearCoatConfiguration";
 import { PHYS } from "./constants";
 import { tuneBallBody } from "./physics";
 import { TIERS, getTier, type TierId } from "./tiers";
@@ -18,7 +16,7 @@ let nextId = 1;
 const iconCache = new Map<number, DynamicTexture>();
 const iconImages = new Map<number, HTMLImageElement>();
 
-/** Punch near-black that touches transparent (clip edge), so K/ChatGPT glyphs sit on glass. */
+/** Punch near-black that touches transparent (clip edge), so K/ChatGPT glyphs sit on the marble. */
 function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void {
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
@@ -57,6 +55,9 @@ function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void
     if (x < size - 1) stack.push(p + 1);
     if (y > 0) stack.push(p - size);
     if (y < size - 1) stack.push(p + size);
+  }
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i] < 36 && d[i + 1] < 36 && d[i + 2] < 36) d[i + 3] = 0;
   }
   ctx.putImageData(img, 0, 0);
 }
@@ -101,6 +102,8 @@ function iconTexture(scene: Scene, tier: TierId): DynamicTexture {
   const size = 512;
   const tex = new DynamicTexture(`icon-${tier}`, { width: size, height: size }, scene, true);
   tex.hasAlpha = true;
+  tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+  tex.wrapV = Texture.CLAMP_ADDRESSMODE;
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
   ctx.clearRect(0, 0, size, size);
   tex.update();
@@ -132,23 +135,16 @@ export function preloadBallIcons(scene: Scene): Promise<void> {
   return Promise.all(jobs).then(() => undefined);
 }
 
-function glassMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
+function shellMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const def = getTier(tier);
   const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
-  const m = new PBRMaterial(`glass-${id}`, scene);
-  m.albedoColor = tint;
-  m.metallic = 0;
-  m.roughness = 0.2;
-  m.indexOfRefraction = 1.5;
+  const m = new StandardMaterial(`shell-${id}`, scene);
+  m.disableLighting = true;
+  m.emissiveColor = tint;
+  m.diffuseColor = tint;
+  m.specularColor = new Color3(0, 0, 0);
   m.alpha = 1;
-  m.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
-  m.subSurface.isRefractionEnabled = false;
-  m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 0.72;
-  m.clearCoat.roughness = 0.08;
-  m.environmentIntensity = 0.22;
-  m.directIntensity = 0.18;
-  m.emissiveColor = tint.scale(0.82);
+  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
   m.backFaceCulling = true;
   return m;
 }
@@ -158,9 +154,11 @@ function coreMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
   const m = new StandardMaterial(`core-${id}`, scene);
   m.disableLighting = true;
-  m.emissiveColor = tint.scale(0.92);
+  m.emissiveColor = tint;
   m.diffuseColor = tint;
   m.specularColor = new Color3(0, 0, 0);
+  m.alpha = 1;
+  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
   return m;
 }
 
@@ -168,32 +166,39 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const dm = new StandardMaterial("face-mat-" + String(id), scene);
   const tex = iconTexture(scene, tier);
   dm.diffuseTexture = tex;
-  dm.opacityTexture = tex;
   dm.emissiveTexture = tex;
   dm.emissiveColor = new Color3(1, 1, 1);
+  dm.diffuseColor = new Color3(1, 1, 1);
   dm.specularColor = new Color3(0, 0, 0);
   dm.disableLighting = true;
   dm.backFaceCulling = true;
   dm.useAlphaFromDiffuseTexture = true;
-  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHATESTANDBLEND;
-  dm.alphaCutOff = 0.18;
-  dm.disableDepthWrite = false;
-  dm.zOffset = -4;
+  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHATEST;
+  dm.alphaCutOff = 0.38;
+  dm.zOffset = -8;
   return dm;
 }
 
-function stampLogo(mesh: Mesh, name: string, radius: number, toward: Vector3, mat: StandardMaterial): Mesh {
-  const s = radius * 1.2;
-  const decal = MeshBuilder.CreateDecal(name, mesh, {
-    position: toward.scale(radius),
-    normal: toward,
-    size: new Vector3(s, s, s),
-    localMode: true,
-    cullBackFaces: true,
-  });
-  decal.material = mat;
-  decal.isPickable = false;
-  return decal;
+function stickerDisc(
+  scene: Scene,
+  name: string,
+  radius: number,
+  dir: Vector3,
+  rotY: number,
+  mat: StandardMaterial,
+): Mesh {
+  const disc = MeshBuilder.CreateDisc(
+    name,
+    { radius: radius * 1.15 * 0.5, tessellation: 48 },
+    scene,
+  );
+  disc.material = mat;
+  disc.isPickable = false;
+  disc.billboardMode = 0;
+  // Core keep-out is 0.55*R; sit on the opaque shell so SwiftShader can see stickers.
+  disc.position.copyFrom(dir.scale(Math.max(radius * 0.55, radius * 1.02)));
+  disc.rotation.y = rotY;
+  return disc;
 }
 
 export class Ball {
@@ -202,7 +207,7 @@ export class Ball {
   readonly radius: number;
   readonly mass: number;
   readonly mesh: Mesh;
-  /** Surface decal. Kept as `face` for Game.ts ghost. */
+  /** Front sticker. Kept as `face` for Game.ts ghost. */
   readonly face: Mesh;
   readonly core: Mesh;
   readonly glint: Mesh;
@@ -226,14 +231,15 @@ export class Ball {
       scene,
     );
     mesh.position.copyFrom(pos);
-    mesh.material = glassMat(scene, tier, this.id);
+    mesh.material = shellMat(scene, tier, this.id);
     mesh.isPickable = true;
     mesh.metadata = { ballId: this.id };
     this.mesh = mesh;
 
+    // Diameter 0.90*radius → core radius 0.45*R, strictly under the 0.55*R sticker plane.
     const core = MeshBuilder.CreateSphere(
       `core-${this.id}`,
-      { diameter: def.radius * 2 * 0.96, segments: 24 },
+      { diameter: def.radius * 0.90, segments: 24 },
       scene,
     );
     core.parent = mesh;
@@ -243,32 +249,27 @@ export class Ball {
     this.core = core;
 
     const dm = logoMat(scene, tier, this.id);
-    const dirs: Array<[string, Vector3]> = [
-      ["z", new Vector3(0, 0, 1)],
-      ["zb", new Vector3(0, 0, -1)],
-      ["x", new Vector3(1, 0, 0)],
-      ["xb", new Vector3(-1, 0, 0)],
-      ["y", new Vector3(0, 1, 0)],
-      ["yb", new Vector3(0, -1, 0)],
-    ];
-    const face = stampLogo(mesh, "face-" + String(this.id), def.radius, dirs[0][1], dm);
-    for (const [tag, dir] of dirs.slice(1)) {
-      stampLogo(mesh, "face-" + tag + "-" + String(this.id), def.radius, dir, dm);
-    }
+    const r = def.radius;
+    const face = stickerDisc(scene, "face-" + String(this.id), r, new Vector3(0, 0, 1), 0, dm);
+    face.parent = mesh;
+    stickerDisc(scene, "face-zb-" + String(this.id), r, new Vector3(0, 0, -1), Math.PI, dm).parent = mesh;
+    stickerDisc(scene, "face-x-" + String(this.id), r, new Vector3(1, 0, 0), Math.PI / 2, dm).parent = mesh;
+    stickerDisc(scene, "face-xb-" + String(this.id), r, new Vector3(-1, 0, 0), -Math.PI / 2, dm).parent = mesh;
     this.face = face;
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
-      { diameter: def.radius * 0.28, segments: 10 },
+      { diameter: def.radius * 0.24, segments: 10 },
       scene,
     );
     glint.parent = mesh;
-    glint.position.set(def.radius * 0.22, def.radius * 0.38, def.radius * 0.78);
+    glint.position.set(def.radius * 0.22, def.radius * 0.38, def.radius * 0.95);
     const gm = new StandardMaterial(`glint-mat-${this.id}`, scene);
     gm.disableLighting = true;
     gm.emissiveColor = new Color3(1, 1, 1);
-    gm.diffuseColor = new Color3(0, 0, 0);
-    gm.alpha = 0.45;
+    gm.diffuseColor = new Color3(1, 1, 1);
+    gm.specularColor = new Color3(0, 0, 0);
+    gm.alpha = 0.85;
     gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
     gm.disableDepthWrite = true;
     glint.material = gm;

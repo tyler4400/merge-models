@@ -155,21 +155,23 @@ function paintGlassWrap(ctx: CanvasRenderingContext2D, tw: number, th: number, k
     // front+back walls don't stack into two neon bars.
     const front = theta >= 0 && theta <= Math.PI ? 1 : 0.18;
     const dist = 1 - edge;
-    const lobe = Math.exp(-dist * dist * 4.2);
+    const lobe = Math.exp(-dist * dist * 6.5);
+    const rim = Math.pow(Math.max(0, (edge - 0.84) / 0.16), 1.2);
     let a: number;
     if (kind === "inner") {
-      a = 0.01 + 0.08 * lobe * front;
+      a = 0.03 + 0.28 * rim * front;
     } else {
-      a = 0.04 + 0.34 * lobe * front;
+      // ±X ~0.80, ±Z ~0.08 (courtyard shows through with a slight vessel wash).
+      a = 0.08 + 0.72 * rim * front;
     }
-    const glow = lobe;
-    rgb[x * 3] = 210 + 32 * glow;
-    rgb[x * 3 + 1] = 232 + 16 * glow;
-    rgb[x * 3 + 2] = 242 + 8 * glow;
+    const glow = Math.max(lobe, rim);
+    rgb[x * 3] = 190 + 50 * glow;
+    rgb[x * 3 + 1] = 234 + 16 * glow;
+    rgb[x * 3 + 2] = 252 + 3 * glow;
     alpha[x] = a;
   }
-  // Wrap-around 1D blur so the lobe eases instead of reading as two cyan strips.
-  const rad = kind === "outer" ? 36 : 20;
+  // Tight wrap blur: edges punch instead of dissolving into a rectangle.
+  const rad = kind === "outer" ? 6 : 4;
   const aBlur = new Float32Array(tw);
   const cBlur = new Float32Array(tw * 3);
   let wtot = 0;
@@ -228,8 +230,7 @@ function glassTubeMat(scene: Scene, name: string, kind: "outer" | "inner"): Stan
   const m = new StandardMaterial(name, scene);
   m.diffuseTexture = tex;
   m.emissiveTexture = tex;
-  m.opacityTexture = tex;
-  m.useAlphaFromDiffuseTexture = true;
+  m.useAlphaFromDiffuseTexture = false;
   m.diffuseColor = new Color3(1, 1, 1);
   m.emissiveColor = new Color3(1, 1, 1);
   m.specularColor = new Color3(0.9, 0.96, 1);
@@ -247,18 +248,32 @@ function glassTubeMat(scene: Scene, name: string, kind: "outer" | "inner"): Stan
 function wrapTubeUvs(mesh: Mesh, y0: number, y1: number): void {
   const pos = mesh.getVerticesData(VertexBuffer.PositionKind);
   if (!pos) return;
-  const uvs: number[] = [];
+  const n = pos.length / 3;
+  const uvs = new Float32Array(n * 2);
+  const colors = new Float32Array(n * 4);
   const h = Math.max(1e-4, y1 - y0);
-  for (let i = 0; i < pos.length; i += 3) {
+  for (let i = 0, t = 0, c = 0; i < pos.length; i += 3, t += 2, c += 4) {
     const x = pos[i];
     const y = pos[i + 1];
     const z = pos[i + 2];
     const theta = Math.atan2(z, x);
     let u = (theta + Math.PI / 2) / (Math.PI * 2);
     if (u < 0) u += 1;
-    uvs.push(u, (y - y0) / h);
+    uvs[t] = u;
+    uvs[t + 1] = (y - y0) / h;
+    // Vertex alpha follows the same ±X rim even if a sampler ignores the wrap UVs.
+    const edge = Math.abs(Math.cos(theta));
+    const front = z >= 0 ? 1 : 0.2;
+    const rim = Math.pow(Math.max(0, (edge - 0.84) / 0.16), 1.2);
+    const a = 0.08 + 0.72 * rim * front;
+    colors[c] = 1;
+    colors[c + 1] = 1;
+    colors[c + 2] = 1;
+    colors[c + 3] = a;
   }
-  mesh.setVerticesData(VertexBuffer.UVKind, uvs);
+  mesh.setVerticesData(VertexBuffer.UVKind, uvs, true);
+  mesh.setVerticesData(VertexBuffer.ColorKind, colors, true);
+  mesh.hasVertexAlpha = true;
 }
 
 function makeTube(
@@ -269,20 +284,24 @@ function makeTube(
   y1: number,
   mat: StandardMaterial,
 ): Mesh {
-  const mesh = MeshBuilder.CreateTube(
+  const height = y1 - y0;
+  const mesh = MeshBuilder.CreateCylinder(
     name,
     {
-      path: [new Vector3(0, y0, 0), new Vector3(0, y1, 0)],
-      radius,
+      height,
+      diameter: radius * 2,
       tessellation: 96,
+      enclose: false,
       cap: 0,
       sideOrientation: Mesh.DOUBLESIDE,
+      updatable: true,
     },
     scene,
   );
+  mesh.position.y = (y0 + y1) / 2;
   mesh.material = mat;
   mesh.isPickable = false;
-  wrapTubeUvs(mesh, y0, y1);
+  wrapTubeUvs(mesh, -height / 2, height / 2);
   return mesh;
 }
 
