@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host --port 5175",
     "build": "tsc && vite build",
-    "preview": "vite preview --host --port 5175"
+    "preview": "vite preview --host --port 5175",
+    "postinstall": "node scripts/copy-havok.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^8.28.2",
