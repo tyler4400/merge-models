@@ -15,8 +15,8 @@ export class FailLine {
     this.mesh = mesh;
     mesh.position.y = FAIL_LINE_Y;
     const mat = new StandardMaterial("fail-line-mat", scene);
-    mat.diffuseColor = new Color3(0.55, 0.32, 0.12);
-    mat.emissiveColor = new Color3(0.55, 0.32, 0.1);
+    mat.diffuseColor = new Color3(1.0, 0.45, 0.08);
+    mat.emissiveColor = new Color3(1.0, 0.42, 0.05);
     mat.specularColor = new Color3(0, 0, 0);
     mat.disableLighting = true;
     mesh.material = mat;
@@ -43,11 +43,11 @@ export class FailLine {
 
     this.warning = warn;
     if (warn) {
-      this.mat.emissiveColor.set(0.82, 0.12, 0.08);
-      this.mat.diffuseColor.set(0.7, 0.1, 0.08);
+      this.mat.emissiveColor.set(1.0, 0.08, 0.05);
+      this.mat.diffuseColor.set(1.0, 0.12, 0.08);
     } else {
-      this.mat.emissiveColor.set(0.55, 0.32, 0.1);
-      this.mat.diffuseColor.set(0.55, 0.32, 0.12);
+      this.mat.emissiveColor.set(1.0, 0.42, 0.05);
+      this.mat.diffuseColor.set(1.0, 0.45, 0.08);
     }
     return { warn, failed };
   }

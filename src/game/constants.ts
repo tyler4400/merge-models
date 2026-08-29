@@ -2,17 +2,17 @@
 
 export const TANK = {
   /** Inner clear width — wide enough that mid-tiers do not jam. */
-  innerWidth: 11.2,
+  innerWidth: 14.6,
   /** Floor (y = 0) to inner rim. */
-  innerHeight: 13.4,
+  innerHeight: 16.2,
   /** Front–back inner depth; T-800 (r ≈ 2.1) still fits. */
   innerDepth: 4.5,
-  wall: 0.38,
+  wall: 0.16,
 } as const;
 
 export const DROP = {
   /** Held-ball center Y, just under the rim. */
-  y: 12.85,
+  y: 15.55,
   /** A / D / arrow move speed (units per second). */
   moveSpeed: 6.2,
   /** Extra inset so a held ball never clips a wall. */
@@ -20,7 +20,7 @@ export const DROP = {
 } as const;
 
 /** Top caution line. Fail only if a settled ball stays over this ~2s. */
-export const FAIL_LINE_Y = 10.55;
+export const FAIL_LINE_Y = 13.35;
 export const FAIL_HOLD_SEC = 2.0;
 /** Start warning when a ball's top is this close to the line. */
 export const WARN_SLACK = 0.85;
@@ -58,8 +58,8 @@ export const T800_PAIR_BONUS = 5000;
 export const GRAVITY_Y = -9.6;
 
 export const CAMERA = {
-  targetY: 6.4,
-  radius: 22.5,
+  targetY: 7.6,
+  radius: 19.2,
   beta: Math.PI / 2.14,
   alpha: Math.PI / 2,
 } as const;

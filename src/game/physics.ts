@@ -51,10 +51,15 @@ export function buildContainer(scene: Scene): ContainerRig {
   const t = TANK.wall;
   const midY = h / 2;
 
-  const wood = wallMat(scene, "wall-wood", new Color3(0.16, 0.11, 0.08));
-  const stone = wallMat(scene, "wall-stone", new Color3(0.1, 0.09, 0.08));
-  const back = wallMat(scene, "wall-back", new Color3(0.07, 0.06, 0.055));
-  const ghost = wallMat(scene, "wall-front", new Color3(0.12, 0.1, 0.08), 0.04);
+  const glass = wallMat(scene, "wall-glass", new Color3(0.78, 0.9, 1), 0.12);
+  glass.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  glass.specularColor = new Color3(0.85, 0.92, 1);
+  glass.needDepthPrePass = true;
+  const stone = wallMat(scene, "wall-floor", new Color3(0.9, 0.95, 1), 0.18);
+  stone.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  const back = wallMat(scene, "wall-back", new Color3(0.85, 0.93, 1), 0.05);
+  back.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  const ghost = wallMat(scene, "wall-front", new Color3(0.85, 0.92, 0.98), 0.06);
   ghost.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   ghost.needDepthPrePass = true;
 
@@ -68,11 +73,15 @@ export function buildContainer(scene: Scene): ContainerRig {
     new Vector3(0, -t / 2, 0),
     stone,
   );
-  const left = boxWall(scene, "wall-L", new Vector3(t, h + t, d + t * 2), new Vector3(-w / 2 - t / 2, midY, 0), wood);
-  const right = boxWall(scene, "wall-R", new Vector3(t, h + t, d + t * 2), new Vector3(w / 2 + t / 2, midY, 0), wood);
+  const left = boxWall(scene, "wall-L", new Vector3(t, h + t, d + t * 2), new Vector3(-w / 2 - t / 2, midY, 0), glass);
+  const right = boxWall(scene, "wall-R", new Vector3(t, h + t, d + t * 2), new Vector3(w / 2 + t / 2, midY, 0), glass);
   const backW = boxWall(scene, "wall-B", new Vector3(w, h + t, t), new Vector3(0, midY, -d / 2 - t / 2), back);
   const front = boxWall(scene, "wall-F", new Vector3(w, h + t, t), new Vector3(0, midY, d / 2 + t / 2), ghost);
-  front.visibility = 0.08;
+  front.visibility = 0.04;
+  left.visibility = 0.22;
+  right.visibility = 0.22;
+  backW.visibility = 0.08;
+  floor.visibility = 0.2;
 
   for (const m of [floor, left, right, backW, front]) m.parent = root;
 

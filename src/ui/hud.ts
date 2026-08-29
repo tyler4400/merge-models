@@ -1,6 +1,5 @@
-/** HTML overlay: score, time, next, hammers, toast, title / win / lose. */
+/** HTML overlay: score, time, next, bottom hammer count, toast, title / win / lose. */
 import "./hud.css";
-import { HAMMER_COUNT } from "../game/constants";
 import { tierDef, type TierId } from "../game/tiers";
 
 export type HudHandlers = {
@@ -32,7 +31,8 @@ export class Hud {
   private resultHammers: HTMLElement;
   private continueBtn: HTMLButtonElement;
   private aimHint: HTMLElement;
-  private hammerBtns: HTMLButtonElement[] = [];
+  private hammerBtn: HTMLButtonElement;
+  private hammerCount: HTMLElement;
 
   constructor(root: HTMLElement, handlers: HudHandlers) {
     this.root = root;
@@ -54,11 +54,13 @@ export class Hud {
             </div>
             <img data-next-img alt="next" />
           </div>
-          <div class="hammers" data-hammers></div>
         </div>
       </div>
       <div class="toast" data-toast></div>
       <div class="aim-hint" data-aim>点一颗已静止的球 · 点空处取消</div>
+      <div class="dock">
+        <button class="hammer" data-hammer type="button">🔨 <span data-hammer-count>3</span></button>
+      </div>
       <div class="overlay show" data-title>
         <div class="card">
           <h1 class="title">合成大模型</h1>
@@ -98,21 +100,13 @@ export class Hud {
     this.resultHammers = root.querySelector("[data-r-ham]")!;
     this.continueBtn = root.querySelector("[data-continue]")!;
     this.aimHint = root.querySelector("[data-aim]")!;
+    this.hammerBtn = root.querySelector("[data-hammer]")!;
+    this.hammerCount = root.querySelector("[data-hammer-count]")!;
 
-    const hammers = root.querySelector("[data-hammers]")!;
-    for (let i = 0; i < HAMMER_COUNT; i++) {
-      const b = document.createElement("button");
-      b.className = "hammer";
-      b.type = "button";
-      b.textContent = "🔨";
-      b.addEventListener("click", (e) => {
-        e.stopPropagation();
-        handlers.onHammer();
-      });
-      hammers.appendChild(b);
-      this.hammerBtns.push(b);
-    }
-
+    this.hammerBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handlers.onHammer();
+    });
     root.querySelector("[data-start]")!.addEventListener("click", () => handlers.onStart());
     this.continueBtn.addEventListener("click", () => handlers.onContinue());
     root.querySelector("[data-restart]")!.addEventListener("click", () => handlers.onRestart());
@@ -133,11 +127,10 @@ export class Hud {
   }
 
   setHammers(left: number, aiming: boolean): void {
-    this.hammerBtns.forEach((b, i) => {
-      b.dataset.used = i >= left ? "1" : "0";
-      b.classList.toggle("active", aiming && i === left - 1);
-      b.disabled = i >= left;
-    });
+    this.hammerCount.textContent = String(left);
+    this.hammerBtn.dataset.empty = left <= 0 ? "1" : "0";
+    this.hammerBtn.classList.toggle("active", aiming && left > 0);
+    this.hammerBtn.disabled = left <= 0;
     this.aimHint.classList.toggle("show", aiming);
   }
 

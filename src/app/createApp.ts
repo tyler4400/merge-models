@@ -1,4 +1,4 @@
-/** Scene + Havok + Game. Night leisure lighting; canvas is never blank. */
+/** Scene + Havok + Game. Bright high-contrast room so glass orbs read clearly. */
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { Color3, Color4, Vector3 } from "@babylonjs/core/Maths/math";
@@ -10,6 +10,7 @@ import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
 import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import "@babylonjs/core/Physics/v2/physicsEngineComponent";
 import "@babylonjs/core/Materials/PBR/pbrSubSurfaceConfiguration";
+import "@babylonjs/core/Materials/PBR/pbrClearCoatConfiguration";
 import HavokPhysics from "@babylonjs/havok";
 import { CAMERA, GRAVITY_Y } from "../game/constants";
 import { Game } from "../game/Game";
@@ -26,9 +27,9 @@ export async function createApp(
   hud: HTMLElement,
 ): Promise<App> {
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.05, 0.04, 0.035, 1);
-  scene.environmentTexture = makeNightEnv(scene);
-  scene.environmentIntensity = 0.7;
+  scene.clearColor = new Color4(0.78, 0.9, 0.98, 1);
+  scene.environmentTexture = makeDayEnv(scene);
+  scene.environmentIntensity = 1.15;
 
   const havok = await HavokPhysics({ locateFile: () => "/HavokPhysics.wasm" });
   const plugin = new HavokPlugin(true, havok);
@@ -47,17 +48,23 @@ export async function createApp(
   camera.attachControl(canvas, false);
   camera.inputs.clear();
 
-  const hemi = new HemisphericLight("hemi", new Vector3(0.2, 1, 0.35), scene);
-  hemi.intensity = 0.5;
-  hemi.groundColor = new Color3(0.12, 0.08, 0.06);
+  const hemi = new HemisphericLight("hemi", new Vector3(0.25, 1, 0.4), scene);
+  hemi.intensity = 1.05;
+  hemi.diffuse = new Color3(1, 0.98, 0.94);
+  hemi.groundColor = new Color3(0.72, 0.78, 0.82);
 
-  const key = new DirectionalLight("key", new Vector3(-0.35, -1, -0.4), scene);
-  key.intensity = 0.8;
-  key.position = new Vector3(4, 14, 8);
+  const key = new DirectionalLight("key", new Vector3(-0.4, -1, -0.25), scene);
+  key.intensity = 1.25;
+  key.diffuse = new Color3(1, 0.98, 0.92);
+  key.position = new Vector3(6, 16, 8);
 
-  const fill = new PointLight("fill", new Vector3(0, 8.5, 3.2), scene);
-  fill.intensity = 0.45;
-  fill.diffuse = new Color3(1, 0.82, 0.62);
+  const fill = new PointLight("fill", new Vector3(-3.5, 7.5, 4), scene);
+  fill.intensity = 0.55;
+  fill.diffuse = new Color3(0.55, 0.75, 1);
+
+  const rim = new PointLight("rim", new Vector3(5, 6, -3), scene);
+  rim.intensity = 0.4;
+  rim.diffuse = new Color3(1, 0.85, 0.55);
 
   const rig = buildContainer(scene);
   rig.failLine.isVisible = true;
@@ -70,8 +77,8 @@ export async function createApp(
   return { scene, game };
 }
 
-/** Tiny procedural cube map — enough IBL for PBR glass without a network HDR. */
-function makeNightEnv(scene: Scene): CubeTexture {
+/** Bright procedural cube map so PBR glass catches highlights. */
+function makeDayEnv(scene: Scene): CubeTexture {
   const face = (top: string, bot: string): string => {
     const c = document.createElement("canvas");
     c.width = c.height = 64;
@@ -84,11 +91,11 @@ function makeNightEnv(scene: Scene): CubeTexture {
     ctx.fillRect(0, 0, 64, 64);
     return c.toDataURL("image/png");
   };
-  const px = face("#1a1410", "#0c0908");
-  const nx = face("#181210", "#0c0908");
-  const py = face("#1c1824", "#141018");
-  const ny = face("#2a1c12", "#1a100c");
-  const pz = face("#16110e", "#0a0807");
-  const nz = face("#16110e", "#0a0807");
+  const px = face("#dff2ff", "#b7d8f0");
+  const nx = face("#e8f6ff", "#c5e0f4");
+  const py = face("#ffffff", "#d8eefe");
+  const ny = face("#f4efe4", "#d9d0c2");
+  const pz = face("#e2f3ff", "#bad7ee");
+  const nz = face("#e2f3ff", "#bad7ee");
   return CubeTexture.CreateFromImages([px, py, pz, nx, ny, nz], scene);
 }
