@@ -27,6 +27,7 @@ const Y_MIN = -TANK.innerHeight * ((SCREEN.h - SCREEN.jarBottom) / SCREEN.jarInn
 
 export const VIEW = {
   halfW: (TANK.innerWidth + TANK.wall * 2) / 2,
+  halfH: VIEW_H / 2,
   yMin: Y_MIN,
   yMax: Y_MIN + VIEW_H,
 } as const;

@@ -78,10 +78,10 @@ export function buildContainer(scene: Scene): ContainerRig {
   const backW = boxWall(scene, "wall-B", new Vector3(w, h + t, t), new Vector3(0, midY, -d / 2 - t / 2), back);
   const front = boxWall(scene, "wall-F", new Vector3(w, h + t, t), new Vector3(0, midY, d / 2 + t / 2), ghost);
   front.visibility = 0.04;
-  left.visibility = 0.22;
-  right.visibility = 0.22;
+  left.visibility = 0.5;
+  right.visibility = 0.5;
   backW.visibility = 0.08;
-  floor.visibility = 0.2;
+  floor.visibility = 0.4;
 
   for (const m of [floor, left, right, backW, front]) m.parent = root;
 

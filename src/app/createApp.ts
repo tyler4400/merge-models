@@ -51,8 +51,8 @@ export async function createApp(
   camera.mode = Camera.ORTHOGRAPHIC_CAMERA;
   camera.orthoLeft = -VIEW.halfW;
   camera.orthoRight = VIEW.halfW;
-  camera.orthoBottom = VIEW.yMin;
-  camera.orthoTop = VIEW.yMax;
+  camera.orthoBottom = -VIEW.halfH;
+  camera.orthoTop = VIEW.halfH;
 
   const hemi = new HemisphericLight("hemi", new Vector3(0.25, 1, 0.4), scene);
   hemi.intensity = 1.05;
