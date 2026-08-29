@@ -137,7 +137,7 @@ export class Ball {
 
     const decal = MeshBuilder.CreateDecal(`face-${this.id}`, mesh, {
       position: pos.add(new Vector3(def.radius * 0.12, 0, 0)),
-      normal: new Vector3(1, 0, 0),
+      normal: new Vector3(0, 0, 1),
       size: new Vector3(def.radius * 1.55, def.radius * 1.55, def.radius * 1.55),
       cullBackFaces: false,
     });
