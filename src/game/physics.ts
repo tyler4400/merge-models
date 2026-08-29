@@ -1,7 +1,6 @@
 /** Havok walls plus a visible glass jar (rim + wooden base) like the ChatGPT mock. */
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
@@ -51,79 +50,61 @@ function boxWall(
   return mesh;
 }
 
-/** Camera-facing fill stays faint; grazing tube walls pick up a bright glass edge. */
-function tubeGlassMat(scene: Scene, name: string): StandardMaterial {
+function edgeGlassMat(scene: Scene, name: string, alpha: number, glow: Color3): StandardMaterial {
   const m = new StandardMaterial(name, scene);
-  m.diffuseColor = new Color3(0.72, 0.9, 1);
-  m.specularColor = new Color3(1, 1, 1);
-  m.specularPower = 128;
-  m.emissiveColor = new Color3(0.42, 0.62, 0.78);
-  m.alpha = 0.16;
+  m.disableLighting = true;
+  m.diffuseColor = glow;
+  m.specularColor = new Color3(0, 0, 0);
+  m.emissiveColor = glow;
+  m.alpha = alpha;
   m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   m.needDepthPrePass = true;
+  m.disableDepthWrite = true;
   m.backFaceCulling = false;
-  m.opacityFresnelParameters = new FresnelParameters({
-    isEnabled: true,
-    power: 2.4,
-    bias: 0.08,
-    leftColor: new Color3(1, 1, 1),
-    rightColor: new Color3(0.06, 0.06, 0.06),
-  });
-  m.emissiveFresnelParameters = new FresnelParameters({
-    isEnabled: true,
-    power: 2.1,
-    bias: 0.12,
-    leftColor: new Color3(0.92, 0.98, 1),
-    rightColor: new Color3(0.1, 0.16, 0.22),
-  });
   return m;
 }
 
-function glassSide(scene: Scene, name: string, h: number): Mesh {
-  const mesh = MeshBuilder.CreateBox(name, { width: 0.34, height: h * 0.97, depth: 1.35 }, scene);
-  const mat = new StandardMaterial(name + "-mat", scene);
-  mat.disableLighting = true;
-  mat.diffuseColor = new Color3(0.78, 0.93, 1);
-  mat.emissiveColor = new Color3(0.7, 0.88, 0.98);
-  mat.specularColor = new Color3(0, 0, 0);
-  mat.alpha = 0.48;
-  mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  mat.needDepthPrePass = true;
-  mat.disableDepthWrite = true;
-  mat.backFaceCulling = false;
+/** Curved glass wall slice — only the left/right of the cylinder, never a filled pane. */
+function glassRibbon(
+  scene: Scene,
+  name: string,
+  radius: number,
+  y0: number,
+  y1: number,
+  a0: number,
+  a1: number,
+  mat: StandardMaterial,
+): Mesh {
+  const segs = 16;
+  const path1: Vector3[] = [];
+  const path2: Vector3[] = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = a0 + (a1 - a0) * (i / segs);
+    const x = Math.cos(a) * radius;
+    const z = Math.sin(a) * radius;
+    path1.push(new Vector3(x, y0, z));
+    path2.push(new Vector3(x, y1, z));
+  }
+  const mesh = MeshBuilder.CreateRibbon(
+    name,
+    { pathArray: [path1, path2], sideOrientation: Mesh.DOUBLESIDE },
+    scene,
+  );
   mesh.material = mat;
   mesh.isPickable = false;
   return mesh;
 }
 
-function verticalStreak(scene: Scene, name: string, h: number, width: number, alpha: number): Mesh {
-  const mesh = MeshBuilder.CreateBox(name, { width, height: h * 0.9, depth: 0.18 }, scene);
-  const mat = new StandardMaterial(name + "-mat", scene);
-  mat.disableLighting = true;
-  mat.diffuseColor = new Color3(0.9, 0.97, 1);
-  mat.emissiveColor = new Color3(0.95, 0.99, 1);
-  mat.specularColor = new Color3(0, 0, 0);
-  mat.alpha = alpha;
-  mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  mat.disableDepthWrite = true;
-  mat.backFaceCulling = false;
-  mesh.material = mat;
-  mesh.isPickable = false;
-  return mesh;
-}
-
-type WoodKind = "lip" | "base";
-
-function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: WoodKind): void {
+function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: "lip" | "base"): void {
   ctx.fillStyle = "#4a2a12";
   ctx.fillRect(0, 0, tw, th);
   for (let i = 0; i < 90; i++) {
     const y0 = (i / 90) * th;
     const wobble = Math.sin(i * 1.37) * 5 + Math.sin(i * 0.41) * 9;
-    const r = 92 + (i % 9) * 10;
-    const g = 52 + (i % 5) * 6;
-    const b = 18 + (i % 3) * 4;
-    ctx.strokeStyle = `rgba(${r},${g},${b},${0.22 + (i % 4) * 0.05})`;
+    const r = 98 + (i % 9) * 11;
+    const g = 56 + (i % 5) * 7;
+    const b = 20 + (i % 3) * 5;
+    ctx.strokeStyle = `rgba(${r},${g},${b},${0.24 + (i % 4) * 0.05})`;
     ctx.lineWidth = 1.2 + (i % 4);
     ctx.beginPath();
     ctx.moveTo(0, y0 + wobble);
@@ -143,48 +124,71 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
   }
   if (kind === "lip") {
     const g = ctx.createLinearGradient(0, 0, 0, th);
-    g.addColorStop(0, "rgba(0,0,0,0.5)");
-    g.addColorStop(0.16, "rgba(255,220,160,0.34)");
-    g.addColorStop(0.38, "rgba(255,255,255,0.1)");
-    g.addColorStop(0.62, "rgba(80,40,12,0.08)");
-    g.addColorStop(0.86, "rgba(20,10,4,0.28)");
-    g.addColorStop(1, "rgba(0,0,0,0.55)");
+    g.addColorStop(0, "rgba(0,0,0,0.58)");
+    g.addColorStop(0.14, "rgba(255,224,170,0.42)");
+    g.addColorStop(0.36, "rgba(255,255,255,0.14)");
+    g.addColorStop(0.58, "rgba(90,45,14,0.08)");
+    g.addColorStop(0.82, "rgba(20,10,4,0.32)");
+    g.addColorStop(1, "rgba(0,0,0,0.62)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, tw, th);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.fillStyle = "#fff";
+    const rr = Math.min(th * 0.48, 52);
+    ctx.beginPath();
+    ctx.roundRect(1, 1, tw - 2, th - 2, rr);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
   } else {
-    const g = ctx.createLinearGradient(0, 0, tw, 0);
-    g.addColorStop(0, "rgba(0,0,0,0.48)");
-    g.addColorStop(0.16, "rgba(0,0,0,0.08)");
-    g.addColorStop(0.5, "rgba(255,224,170,0.16)");
-    g.addColorStop(0.84, "rgba(0,0,0,0.08)");
-    g.addColorStop(1, "rgba(0,0,0,0.48)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, tw, th);
+    const img = ctx.getImageData(0, 0, tw, th);
+    const d = img.data;
+    for (let x = 0; x < tw; x++) {
+      const theta = (x / tw) * Math.PI * 2;
+      const facing = Math.abs(Math.sin(theta));
+      const mul = 0.75 + 1.05 * facing;
+      for (let y = 0; y < th; y++) {
+        const i = (y * tw + x) * 4;
+        d[i] = Math.min(255, d[i] * mul + facing * 62);
+        d[i + 1] = Math.min(255, d[i + 1] * mul + facing * 28);
+        d[i + 2] = Math.min(255, d[i + 2] * mul + facing * 8);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
     const v = ctx.createLinearGradient(0, 0, 0, th);
-    v.addColorStop(0, "rgba(255,210,150,0.18)");
+    v.addColorStop(0, "rgba(255,220,160,0.28)");
     v.addColorStop(0.45, "rgba(0,0,0,0)");
-    v.addColorStop(1, "rgba(0,0,0,0.38)");
+    v.addColorStop(1, "rgba(0,0,0,0.45)");
     ctx.fillStyle = v;
     ctx.fillRect(0, 0, tw, th);
   }
 }
 
-function woodMat(scene: Scene, name: string, kind: WoodKind): StandardMaterial {
+function woodMat(scene: Scene, name: string, kind: "lip" | "base"): StandardMaterial {
   const tw = 512;
-  const th = kind === "lip" ? 128 : 256;
+  const th = kind === "lip" ? 140 : 256;
   const tex = new DynamicTexture(name + "-tex", { width: tw, height: th }, scene, true);
+  tex.hasAlpha = kind === "lip";
   tex.wrapU = Texture.WRAP_ADDRESSMODE;
   tex.wrapV = Texture.WRAP_ADDRESSMODE;
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
   paintWood(ctx, tw, th, kind);
   tex.update();
   const m = new StandardMaterial(name, scene);
-  m.disableLighting = true;
   m.diffuseTexture = tex;
   m.emissiveTexture = tex;
-  m.emissiveColor = new Color3(1, 1, 1);
-  m.specularColor = new Color3(0, 0, 0);
   m.diffuseColor = new Color3(1, 1, 1);
+  m.specularColor = new Color3(0.22, 0.16, 0.08);
+  m.specularPower = 36;
+  if (kind === "lip") {
+    m.useAlphaFromDiffuseTexture = true;
+    m.transparencyMode = StandardMaterial.MATERIAL_ALPHATESTANDBLEND;
+    m.alphaCutOff = 0.2;
+    m.disableLighting = true;
+    m.emissiveColor = new Color3(1, 1, 1);
+  } else {
+    m.disableLighting = true;
+    m.emissiveColor = new Color3(1, 1, 1);
+  }
   return m;
 }
 
@@ -195,6 +199,10 @@ export function buildContainer(scene: Scene): ContainerRig {
   const t = TANK.wall;
   const midY = h / 2;
   const outerR = (w + t) / 2;
+  const innerR = outerR - 0.18;
+  const y0 = 0.08;
+  const y1 = h - 0.04;
+  const span = 0.52;
 
   const physGlass = wallMat(scene, "wall-glass", new Color3(0.78, 0.93, 1), 0.62);
   const floorMat = wallMat(scene, "wall-floor", new Color3(0.78, 0.92, 1), 0.5);
@@ -203,7 +211,9 @@ export function buildContainer(scene: Scene): ContainerRig {
 
   const rimWood = woodMat(scene, "jar-wood-rim", "lip");
   const baseWood = woodMat(scene, "jar-wood-base", "base");
-  const tubeMat = tubeGlassMat(scene, "jar-tube-glass");
+  const outerGlass = edgeGlassMat(scene, "jar-glass-outer", 0.34, new Color3(0.55, 0.78, 0.92));
+  const innerGlass = edgeGlassMat(scene, "jar-glass-inner", 0.22, new Color3(0.42, 0.68, 0.86));
+  const rimLight = edgeGlassMat(scene, "jar-glass-rimlight", 0.42, new Color3(0.82, 0.93, 1));
 
   const root = MeshBuilder.CreateBox("container-root", { width: 0.01, height: 0.01, depth: 0.01 }, scene);
   root.isVisible = false;
@@ -219,103 +229,52 @@ export function buildContainer(scene: Scene): ContainerRig {
   backW.visibility = 0;
   floor.visibility = 0;
 
-  const body = MeshBuilder.CreateTube(
-    "jar-body",
-    {
-      path: [new Vector3(0, 0.06, 0), new Vector3(0, h - 0.05, 0)],
-      radius: outerR,
-      tessellation: 56,
-      cap: 0,
-      sideOrientation: Mesh.DOUBLESIDE,
-    },
-    scene,
-  );
-  body.material = tubeMat;
-  body.isPickable = false;
+  const rightA0 = -span;
+  const rightA1 = span;
+  const leftA0 = Math.PI - span;
+  const leftA1 = Math.PI + span;
 
-  const inner = MeshBuilder.CreateTube(
-    "jar-inner",
-    {
-      path: [new Vector3(0, 0.1, 0), new Vector3(0, h - 0.08, 0)],
-      radius: outerR - 0.2,
-      tessellation: 56,
-      cap: 0,
-      sideOrientation: Mesh.DOUBLESIDE,
-    },
-    scene,
-  );
-  inner.material = tubeMat;
-  inner.isPickable = false;
+  const wallRO = glassRibbon(scene, "jar-wall-RO", outerR, y0, y1, rightA0, rightA1, outerGlass);
+  const wallRI = glassRibbon(scene, "jar-wall-RI", innerR, y0 + 0.04, y1 - 0.04, rightA0, rightA1, innerGlass);
+  const wallLO = glassRibbon(scene, "jar-wall-LO", outerR, y0, y1, leftA0, leftA1, outerGlass);
+  const wallLI = glassRibbon(scene, "jar-wall-LI", innerR, y0 + 0.04, y1 - 0.04, leftA0, leftA1, innerGlass);
 
-  const sideL = glassSide(scene, "jar-side-L", h);
-  sideL.position.set(-outerR, midY, 0.04);
-  const sideR = glassSide(scene, "jar-side-R", h);
-  sideR.position.set(outerR, midY, 0.04);
+  const hiR = glassRibbon(scene, "jar-hi-R", outerR + 0.03, y0 + 0.15, y1 - 0.15, -0.12, 0.12, rimLight);
+  const hiL = glassRibbon(scene, "jar-hi-L", outerR + 0.03, y0 + 0.15, y1 - 0.15, Math.PI - 0.12, Math.PI + 0.12, rimLight);
 
-  const rimH = 0.52;
+  const rimH = 0.78;
   const rim = MeshBuilder.CreateBox(
     "jar-rim",
-    { width: w + t * 2.35, height: rimH, depth: d + t * 2.5 },
+    { width: w + t * 2.45, height: rimH, depth: d + t * 2.2 },
     scene,
   );
-  rim.position.set(0, h + rimH * 0.28, 0);
+  rim.position.set(0, h + 0.28, 0);
   rim.material = rimWood;
   rim.isPickable = false;
 
-  const rimBevel = MeshBuilder.CreateBox(
-    "jar-rim-bevel",
-    { width: w + t * 2.15, height: rimH * 0.38, depth: d + t * 2.2 },
-    scene,
-  );
-  rimBevel.position.set(0, h + rimH * 0.58, 0.02);
-  rimBevel.material = rimWood;
-  rimBevel.isPickable = false;
-
   const base = MeshBuilder.CreateCylinder(
     "jar-base",
-    { diameter: w + t * 2.7, height: 0.78, tessellation: 48 },
+    { diameter: w + t * 2.75, height: 0.82, tessellation: 48 },
     scene,
   );
-  base.position.set(0, -0.48, 0);
+  base.position.set(0, -0.5, 0);
   base.material = baseWood;
   base.isPickable = false;
 
   const foot = MeshBuilder.CreateCylinder(
     "jar-foot",
-    { diameter: w + t * 3.05, height: 0.22, tessellation: 48 },
+    { diameter: w + t * 3.15, height: 0.24, tessellation: 48 },
     scene,
   );
-  foot.position.set(0, -0.86, 0);
+  foot.position.set(0, -0.9, 0);
   foot.material = baseWood;
   foot.isPickable = false;
 
-  const streakL = verticalStreak(scene, "jar-streak-L", h, 0.14, 0.62);
-  streakL.position.set(-outerR + 0.08, midY, 0.22);
-  const streakR = verticalStreak(scene, "jar-streak-R", h, 0.14, 0.62);
-  streakR.position.set(outerR - 0.08, midY, 0.22);
-  const streakL2 = verticalStreak(scene, "jar-streak-L2", h, 0.07, 0.38);
-  streakL2.position.set(-outerR + 0.22, midY, 0.18);
-  const streakR2 = verticalStreak(scene, "jar-streak-R2", h, 0.07, 0.38);
-  streakR2.position.set(outerR - 0.22, midY, 0.18);
-
-  const visuals = [
-    body,
-    inner,
-    sideL,
-    sideR,
-    rim,
-    rimBevel,
-    base,
-    foot,
-    streakL,
-    streakR,
-    streakL2,
-    streakR2,
-  ];
+  const visuals = [wallRO, wallRI, wallLO, wallLI, hiR, hiL, rim, base, foot];
   for (const m of [floor, left, right, backW, front, ...visuals]) m.parent = root;
 
-  const failLine = MeshBuilder.CreatePlane("fail-line", { width: w - 0.25, height: 0.09 }, scene);
-  failLine.position.set(0, 0, 0.55);
+  const failLine = MeshBuilder.CreatePlane("fail-line", { width: w - 0.2, height: 0.11 }, scene);
+  failLine.position.set(0, 0, 0.7);
   failLine.isPickable = false;
   failLine.parent = root;
 
