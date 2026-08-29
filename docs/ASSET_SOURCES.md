@@ -1,5 +1,8 @@
 # 合成大模型 demo assets — sources
 
+
+> **T-800 更正：** 游戏使用的 `10-t800.png` 是端头像（ICON HEAD，与 `10-t800-icon.png` 相同），不是下表里那张 Tekniska museet 博物馆静物照。
+
 All files under `/workspace/merge-assets/` are for a playable demo only.
 Prefer official / first-party / Wikimedia Commons / brand-guide originals.
 SVGs converted to 512px PNG with `rsvg-convert`. Official bitmaps resized with ImageMagick Lanczos.
