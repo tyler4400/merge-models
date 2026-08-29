@@ -437,18 +437,22 @@ export class Game {
     this.hud.showLose(this.score, this.elapsed, this.hammers.left);
   }
 
-  /** Headless confirmation shot: start and drop a few balls. */
+  /** Headless confirmation shot: start with several balls already in the tank. */
   autoshot(): void {
     this.start();
-    const xs = [-2.4, -0.6, 1.2, 2.8, -1.5];
-    let i = 0;
-    const step = () => {
-      if (i >= xs.length) return;
-      this.dropX = xs[i];
-      this.tryDrop();
-      i += 1;
-      window.setTimeout(step, 850);
-    };
-    window.setTimeout(step, 500);
+    const spots: Array<[number, number, TierId]> = [
+      [-2.6, 1.2, 1],
+      [-0.9, 1.3, 2],
+      [1.1, 1.4, 3],
+      [2.8, 1.2, 1],
+      [-1.8, 2.6, 2],
+      [0.4, 2.7, 4],
+    ];
+    for (const [x, y, tier] of spots) {
+      const ball = new Ball(this.scene, tier, new Vector3(x, y, 0));
+      ball.enablePhysics(this.scene);
+      this.balls.push(ball);
+      this.register(ball);
+    }
   }
 }
