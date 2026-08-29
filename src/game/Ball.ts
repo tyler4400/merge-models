@@ -136,9 +136,9 @@ export class Ball {
     this.core = core;
 
     const decal = MeshBuilder.CreateDecal(`face-${this.id}`, mesh, {
-      position: pos.add(new Vector3(def.radius * 0.12, 0, 0)),
+      position: pos.add(new Vector3(0, 0, def.radius * 0.12)),
       normal: new Vector3(0, 0, 1),
-      size: new Vector3(def.radius * 1.55, def.radius * 1.55, def.radius * 1.55),
+      size: new Vector3(def.radius * 1.7, def.radius * 1.7, def.radius * 1.7),
       cullBackFaces: false,
     });
     const dm = new StandardMaterial(`face-mat-${this.id}`, scene);
