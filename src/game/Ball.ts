@@ -126,7 +126,7 @@ export class Ball {
 
     const core = MeshBuilder.CreateSphere(
       `core-${this.id}`,
-      { diameter: def.radius * 2 * 0.9, segments: 24 },
+      { diameter: def.radius * 2 * 0.62, segments: 24 },
       scene,
     );
     core.parent = mesh;
@@ -139,6 +139,7 @@ export class Ball {
     face.parent = mesh;
     face.position.set(0, 0, 0);
     face.billboardMode = 7;
+    face.renderingGroupId = 1;
     const dm = new StandardMaterial("face-mat-" + String(this.id), scene);
     const tex = iconTexture(scene, tier);
     dm.diffuseTexture = tex;
@@ -150,6 +151,7 @@ export class Ball {
     dm.useAlphaFromDiffuseTexture = true;
     dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
     face.material = dm;
+    dm.disableDepthWrite = true;
     face.isPickable = false;
     this.face = face;
 
