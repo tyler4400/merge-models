@@ -59,7 +59,7 @@ export class Hud {
           </div>
         </div>
       </div>
-      <div class="fail-mark" aria-hidden="true"><span>⚠️ 警告</span></div>
+      <div class="fail-mark" aria-hidden="true"><span>⚠️ 小心！快要到顶啦！⚠️</span></div>
       <div class="toast" data-toast></div>
       <div class="aim-hint" data-aim>点一颗已静止的球 · 点空处取消</div>
       <div class="dock">

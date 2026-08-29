@@ -52,15 +52,15 @@ function boxWall(
 }
 
 function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: "lip" | "base"): void {
-  ctx.fillStyle = "#4a2a12";
+  ctx.fillStyle = "#7a4520";
   ctx.fillRect(0, 0, tw, th);
   for (let i = 0; i < 90; i++) {
     const y0 = (i / 90) * th;
     const wobble = Math.sin(i * 1.37) * 5 + Math.sin(i * 0.41) * 9;
-    const r = 98 + (i % 9) * 11;
-    const g = 56 + (i % 5) * 7;
-    const b = 20 + (i % 3) * 5;
-    ctx.strokeStyle = `rgba(${r},${g},${b},${0.24 + (i % 4) * 0.05})`;
+    const r = 156 + (i % 9) * 12;
+    const g = 92 + (i % 5) * 8;
+    const b = 36 + (i % 3) * 6;
+    ctx.strokeStyle = `rgba(${r},${g},${b},${0.22 + (i % 4) * 0.05})`;
     ctx.lineWidth = 1.2 + (i % 4);
     ctx.beginPath();
     ctx.moveTo(0, y0 + wobble);
@@ -73,7 +73,7 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
   for (let k = 0; k < 5; k++) {
     const kx = 40 + k * 90 + (k % 2) * 20;
     const ky = 30 + (k * 47) % (th - 50);
-    ctx.fillStyle = "rgba(30, 14, 6, 0.22)";
+    ctx.fillStyle = "rgba(90, 42, 16, 0.18)";
     ctx.beginPath();
     ctx.ellipse(kx, ky, 11, 5.5, k * 0.4, 0, Math.PI * 2);
     ctx.fill();
@@ -81,11 +81,11 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
   if (kind === "lip") {
     // V wraps the tube: v=0.5 is the outer equator (camera-facing on the front arc).
     const g = ctx.createLinearGradient(0, 0, 0, th);
-    g.addColorStop(0, "rgba(0,0,0,0.55)");
-    g.addColorStop(0.22, "rgba(40,18,6,0.28)");
-    g.addColorStop(0.5, "rgba(255,230,180,0.42)");
-    g.addColorStop(0.72, "rgba(255,210,140,0.16)");
-    g.addColorStop(1, "rgba(0,0,0,0.55)");
+    g.addColorStop(0, "rgba(50,22,8,0.28)");
+    g.addColorStop(0.22, "rgba(120,58,18,0.12)");
+    g.addColorStop(0.5, "rgba(255,224,168,0.50)");
+    g.addColorStop(0.72, "rgba(255,196,120,0.18)");
+    g.addColorStop(1, "rgba(48,20,8,0.30)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, tw, th);
   } else {
@@ -94,19 +94,19 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
     for (let x = 0; x < tw; x++) {
       const theta = (x / tw) * Math.PI * 2;
       const facing = Math.abs(Math.sin(theta));
-      const mul = 0.75 + 1.05 * facing;
+      const mul = 0.92 + 0.78 * facing;
       for (let y = 0; y < th; y++) {
         const i = (y * tw + x) * 4;
-        d[i] = Math.min(255, d[i] * mul + facing * 62);
-        d[i + 1] = Math.min(255, d[i + 1] * mul + facing * 28);
-        d[i + 2] = Math.min(255, d[i + 2] * mul + facing * 8);
+        d[i] = Math.min(255, d[i] * mul + facing * 78);
+        d[i + 1] = Math.min(255, d[i + 1] * mul + facing * 42);
+        d[i + 2] = Math.min(255, d[i + 2] * mul + facing * 14);
       }
     }
     ctx.putImageData(img, 0, 0);
     const v = ctx.createLinearGradient(0, 0, 0, th);
-    v.addColorStop(0, "rgba(255,220,160,0.28)");
+    v.addColorStop(0, "rgba(255,224,170,0.34)");
     v.addColorStop(0.45, "rgba(0,0,0,0)");
-    v.addColorStop(1, "rgba(0,0,0,0.45)");
+    v.addColorStop(1, "rgba(40,16,6,0.28)");
     ctx.fillStyle = v;
     ctx.fillRect(0, 0, tw, th);
   }
@@ -134,33 +134,70 @@ function woodMat(scene: Scene, name: string, kind: "lip" | "base"): StandardMate
   return m;
 }
 
-/** Wrap-around glass: opaque at ±X silhouette, almost clear on ±Z (camera). */
+/** Wrap-around glass: soft fresnel at ±X, almost clear on ±Z (camera). */
 function paintGlassWrap(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: "outer" | "inner"): void {
-  const img = ctx.createImageData(tw, th);
-  const d = img.data;
+  const alpha = new Float32Array(tw);
+  const rgb = new Float32Array(tw * 3);
   for (let x = 0; x < tw; x++) {
     // u=0 at -Z (back, seam hidden), u=0.25 at +X, u=0.5 at +Z, u=0.75 at -X
     const theta = (x / tw) * Math.PI * 2 - Math.PI / 2;
+    // 1 at ±X silhouette, 0 at ±Z — same as abs(sin) of camera azimuth
     const edge = Math.abs(Math.cos(theta));
     let a: number;
-    let broad: number;
     if (kind === "inner") {
-      broad = Math.pow(edge, 3.1);
-      a = 0.02 + 0.42 * broad;
+      a = 0.02 + 0.22 * Math.pow(edge, 2.4);
     } else {
-      broad = Math.pow(edge, 0.92);
-      const caustic = Math.pow(edge, 6) * 0.12;
-      a = 0.08 + 0.40 * broad + caustic;
+      // Wider than a thin bar; cubic-ish falloff, no pow-6 caustic spike.
+      a = 0.055 + 0.40 * Math.pow(edge, 1.85);
     }
-    const r = 172 + 70 * broad;
-    const g = 216 + 32 * broad;
-    const b = 236 + 16 * broad;
+    const glow = Math.pow(edge, 1.6);
+    rgb[x * 3] = 196 + 44 * glow;
+    rgb[x * 3 + 1] = 228 + 20 * glow;
+    rgb[x * 3 + 2] = 240 + 10 * glow;
+    alpha[x] = a;
+  }
+  // Wrap-around 1D blur so the lobe eases instead of reading as two cyan strips.
+  const rad = kind === "outer" ? 22 : 14;
+  const aBlur = new Float32Array(tw);
+  const cBlur = new Float32Array(tw * 3);
+  let wtot = 0;
+  const wts: number[] = [];
+  for (let k = -rad; k <= rad; k++) {
+    const w = 1 - Math.abs(k) / (rad + 1);
+    wts.push(w);
+    wtot += w;
+  }
+  for (let x = 0; x < tw; x++) {
+    let sa = 0;
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    for (let k = -rad; k <= rad; k++) {
+      const i = (x + k + tw * 4) % tw;
+      const w = wts[k + rad];
+      sa += alpha[i] * w;
+      sr += rgb[i * 3] * w;
+      sg += rgb[i * 3 + 1] * w;
+      sb += rgb[i * 3 + 2] * w;
+    }
+    aBlur[x] = sa / wtot;
+    cBlur[x * 3] = sr / wtot;
+    cBlur[x * 3 + 1] = sg / wtot;
+    cBlur[x * 3 + 2] = sb / wtot;
+  }
+  const img = ctx.createImageData(tw, th);
+  const d = img.data;
+  for (let x = 0; x < tw; x++) {
+    const r = cBlur[x * 3];
+    const g = cBlur[x * 3 + 1];
+    const b = cBlur[x * 3 + 2];
+    const a = Math.min(255, aBlur[x] * 255);
     for (let y = 0; y < th; y++) {
       const i = (y * tw + x) * 4;
       d[i] = r;
       d[i + 1] = g;
       d[i + 2] = b;
-      d[i + 3] = Math.min(255, a * 255);
+      d[i + 3] = a;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -290,28 +327,28 @@ export function buildContainer(scene: Scene): ContainerRig {
 
   const base = MeshBuilder.CreateCylinder(
     "jar-base",
-    { diameter: w + t * 2.75, height: 0.82, tessellation: 48 },
+    { diameter: w + t * 2.55, height: 0.62, tessellation: 48 },
     scene,
   );
-  base.position.set(0, -0.5, 0);
+  base.position.set(0, -0.34, 0);
   base.material = baseWood;
   base.isPickable = false;
 
   const foot = MeshBuilder.CreateCylinder(
     "jar-foot",
-    { diameter: w + t * 3.15, height: 0.24, tessellation: 48 },
+    { diameter: w + t * 3.55, height: 0.58, tessellation: 48 },
     scene,
   );
-  foot.position.set(0, -0.9, 0);
+  foot.position.set(0, -0.94, 0);
   foot.material = baseWood;
   foot.isPickable = false;
 
   const baseRing = MeshBuilder.CreateTorus(
     "jar-base-ring",
-    { diameter: w + t * 2.95, thickness: 0.34, tessellation: 48 },
+    { diameter: w + t * 3.05, thickness: 0.32, tessellation: 48 },
     scene,
   );
-  baseRing.position.set(0, -0.82, 0);
+  baseRing.position.set(0, -0.64, 0);
   baseRing.material = rimWood;
   baseRing.isPickable = false;
 
