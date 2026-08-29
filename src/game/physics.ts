@@ -143,21 +143,25 @@ function paintGlassWrap(ctx: CanvasRenderingContext2D, tw: number, th: number, k
     const theta = (x / tw) * Math.PI * 2 - Math.PI / 2;
     // 1 at ±X silhouette, 0 at ±Z — same as abs(sin) of camera azimuth
     const edge = Math.abs(Math.cos(theta));
+    // Front hemisphere (incl. ±X) carries the fresnel; back stays faint so
+    // front+back walls don't stack into two neon bars.
+    const front = theta >= 0 && theta <= Math.PI ? 1 : 0.18;
+    const dist = 1 - edge;
+    const lobe = Math.exp(-dist * dist * 4.2);
     let a: number;
     if (kind === "inner") {
-      a = 0.02 + 0.22 * Math.pow(edge, 2.4);
+      a = 0.01 + 0.08 * lobe * front;
     } else {
-      // Wider than a thin bar; cubic-ish falloff, no pow-6 caustic spike.
-      a = 0.055 + 0.40 * Math.pow(edge, 1.85);
+      a = 0.04 + 0.34 * lobe * front;
     }
-    const glow = Math.pow(edge, 1.6);
-    rgb[x * 3] = 196 + 44 * glow;
-    rgb[x * 3 + 1] = 228 + 20 * glow;
-    rgb[x * 3 + 2] = 240 + 10 * glow;
+    const glow = lobe;
+    rgb[x * 3] = 210 + 32 * glow;
+    rgb[x * 3 + 1] = 232 + 16 * glow;
+    rgb[x * 3 + 2] = 242 + 8 * glow;
     alpha[x] = a;
   }
   // Wrap-around 1D blur so the lobe eases instead of reading as two cyan strips.
-  const rad = kind === "outer" ? 22 : 14;
+  const rad = kind === "outer" ? 36 : 20;
   const aBlur = new Float32Array(tw);
   const cBlur = new Float32Array(tw * 3);
   let wtot = 0;
@@ -262,7 +266,7 @@ function makeTube(
     {
       path: [new Vector3(0, y0, 0), new Vector3(0, y1, 0)],
       radius,
-      tessellation: 64,
+      tessellation: 96,
       cap: 0,
       sideOrientation: Mesh.DOUBLESIDE,
     },
@@ -336,10 +340,10 @@ export function buildContainer(scene: Scene): ContainerRig {
 
   const foot = MeshBuilder.CreateCylinder(
     "jar-foot",
-    { diameter: w + t * 3.55, height: 0.58, tessellation: 48 },
+    { diameter: w + t * 3.7, height: 0.7, tessellation: 48 },
     scene,
   );
-  foot.position.set(0, -0.94, 0);
+  foot.position.set(0, -1.0, 0);
   foot.material = baseWood;
   foot.isPickable = false;
 
