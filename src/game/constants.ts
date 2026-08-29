@@ -1,15 +1,18 @@
-/** 390x844 phone. Jar sits inset like Suika, courtyard shows around it. */
+/** 390x844 phone. Physics box is the painted jar interior of 01-courtyard.png. */
 
 export const SCREEN = {
   w: 390,
   h: 844,
-  hudTop: 108,
-  jarTop: 132,
-  jarBottom: 668,
-  jarInnerW: 286,
-  jarInnerH: 536,
-  side: 52,
-  hammerTop: 700,
+  hudTop: 118,
+  // Measured on 01-courtyard.png (1536×1024), portrait window 473×1024
+  // centered on the jar (x 519–992) mapped 1:1 onto the 390×844 view.
+  // Inner glass faces ≈ src x 572–938, rim ≈ y 200, wood top ≈ y 852.
+  jarTop: 165,
+  jarBottom: 702,
+  jarInnerW: 302,
+  jarInnerH: 537,
+  side: 44,
+  hammerTop: 720,
 } as const;
 
 const INNER_W = 8;

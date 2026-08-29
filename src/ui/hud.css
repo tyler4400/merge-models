@@ -1,46 +1,20 @@
 
 #hud .brand {
   position: absolute;
-  top: 6px;
+  top: 4px;
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 28px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #ffc43a;
-  -webkit-text-stroke: 6px #fff;
-  paint-order: stroke fill;
-  text-shadow:
-    0 1px 0 #fff,
-    0 2px 0 #fff,
-    0 3px 0 #ffe08a,
-    0 4px 0 #f0a020,
-    0 5px 0 #d47810,
-    0 6px 0 #b85e08,
-    0 8px 0 #8a4200,
-    0 11px 16px rgba(160, 70, 10, 0.38);
   z-index: 3;
+  pointer-events: none;
+  line-height: 0;
 }
-#hud .brand::before,
-#hud .brand::after {
-  content: "";
+#hud .brand img {
+  width: min(86%, 340px);
+  height: auto;
+  max-height: 58px;
+  object-fit: contain;
   display: inline-block;
-  width: 11px;
-  height: 8px;
-  margin: 0 3px;
-  background: #5cb84a;
-  border-radius: 0 80% 0 80%;
-  box-shadow: 1px 1px 0 #fff, 0 2px 3px rgba(40, 90, 20, 0.25);
-  transform: rotate(-48deg);
-  vertical-align: middle;
-  position: relative;
-  top: -7px;
-}
-#hud .brand::after {
-  background: #6fc85a;
-  transform: rotate(48deg) scaleX(-1);
-  top: -6px;
 }
 #hud {
   position: absolute;
@@ -53,14 +27,13 @@
 
 #hud .bar {
   position: absolute;
-  top: 0;
   left: 0;
   right: 0;
   display: flex;
   justify-content: space-between;
-  height: calc(56 / 844 * 100%);
-  top: calc(42 / 844 * 100%);
-  padding: 8px 12px 0;
+  height: calc(52 / 844 * 100%);
+  top: calc(62 / 844 * 100%);
+  padding: 0 12px;
   align-items: stretch;
   gap: 8px;
 }
@@ -68,10 +41,13 @@
 #hud .score-block,
 #hud .time-block,
 #hud .next {
-  background: rgba(255, 248, 232, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 6px 16px rgba(70, 140, 200, 0.18);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, rgba(255, 250, 236, 0.94) 0%, rgba(255, 236, 204, 0.90) 100%);
+  border: 0;
+  outline: 0;
+  box-shadow:
+    0 6px 14px rgba(120, 90, 40, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
   position: relative;
 }
 
@@ -196,9 +172,9 @@
 
 #hud .fail-mark {
   position: absolute;
-  left: calc(52 / 390 * 100%);
-  width: calc(286 / 390 * 100%);
-  /* top is set from SCREEN.jarTop / FAIL_LINE_Y in hud.ts so the caption sits on the 3D mesh */
+  left: calc(44 / 390 * 100%);
+  width: calc(302 / 390 * 100%);
+  /* top / left / width also set from SCREEN in hud.ts */
   top: calc(180 / 844 * 100%);
   height: 0;
   pointer-events: none;
@@ -233,52 +209,54 @@
 #hud .hammer {
   pointer-events: auto;
   position: relative;
-  width: 64px;
-  height: 64px;
-  min-width: 64px;
-  border-radius: 18px;
+  width: 86px;
+  height: 86px;
+  min-width: 86px;
+  border-radius: 22px;
   border: 0;
   padding: 0;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0) 38%),
-    radial-gradient(circle at 35% 30%, #fff6c2, #ffd24a 55%, #e8a820);
+  background-color: transparent;
+  background-image: url("../assets/ui/hammer.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
   color: #7a4a12;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -5px 10px rgba(180, 100, 0, 0.22),
-    0 8px 18px rgba(240, 170, 40, 0.45);
+  box-shadow: none;
 }
 #hud .hammer .mallet {
-  width: 44px;
-  height: 44px;
-  display: block;
-  margin: 2px auto 0;
-  filter: drop-shadow(0 2px 2px rgba(120, 70, 10, 0.28));
+  display: none;
 }
 #hud .hammer .ham-count {
   position: absolute;
-  right: 5px;
-  bottom: 4px;
+  right: 4px;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
   font-weight: 800;
   color: #fff;
+  background: #f07818;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(120, 50, 0, 0.35);
   text-shadow: 0 1px 2px rgba(120, 60, 0, 0.75);
   letter-spacing: 0.02em;
 }
 
 #hud .hammer[data-empty="1"] {
   opacity: 0.4;
-  box-shadow: none;
+  filter: grayscale(0.35);
 }
 
 #hud .hammer.active {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 38%),
-    radial-gradient(circle at 35% 30%, #ffe0b0, #ff9a3d);
   transform: scale(0.96);
+  filter: saturate(1.15);
 }
 
 #hud .toast {
@@ -327,14 +305,19 @@
 }
 
 #hud .title {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: 0.06em;
   margin: 0 0 8px;
   color: #1670d8;
-  -webkit-text-stroke: 5px #fff;
-  paint-order: stroke fill;
-  text-shadow: 0 3px 0 #1e6fd4, 0 8px 16px rgba(80, 160, 220, 0.35);
+}
+#hud .title-art {
+  display: block;
+  width: min(100%, 320px);
+  height: auto;
+  max-height: 72px;
+  object-fit: contain;
+  margin: 0 auto 10px;
 }
 
 #hud .sub {

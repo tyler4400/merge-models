@@ -75,14 +75,16 @@ src/
     tiers.ts              10 级：id、中文名、半径、质量、图标
     scoring.ts            10*n*n、连击 1.25、首杀 T-800 +3000 + 时间奖励、双 T-800 +5000
     spawn.ts              下一颗队列，仅 1-4 级，权重 35/30/20/15
-    physics.ts            Havok 世界、容器墙、静止检测
+    physics.ts            Havok 隐形盒墙；罐子是关卡贴图
     merge.ts              同级接触 → 下一级上弹；两颗 T-800 消失
     hammer.ts             3 锤子：瞄准 → 点静止球 → 碎裂 VFX
     failLine.ts           靠近变红 + 警报；静止越线约 2s 失败
-    Ball.ts               玻璃 PBR 球 + 图标贴花 / 短名
+    Ball.ts               不透明玻璃弹珠 + 球面贴纸 + 高光
   ui/                     HTML/CSS 覆盖层：分数、计时、下一颗、锤子、toast、胜负
   audio/Sfx.ts            Web Audio 程序音：碰撞、合成、碎裂、警报、胜利
   assets/icons/           01-doubao.png … 10-t800.png
+  assets/levels/          01-courtyard.png（院子+画上的玻璃缸）
+  assets/ui/              title.png、hammer.png
 ```
 
 玩法细则只放在 `docs/BRIEF.md`，避免和代码各说各话。
@@ -121,4 +123,4 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 ## 现状
 
-PHASE 1：侧视玻璃容器、1–4 级投放（权重 35/30/20/15）、手持球左右移动、幽灵预览、NEXT、上一颗未静止不能再投、Havok 滚动堆叠。尚未做合成、计分、锤子、胜负、警戒线。
+罐子是 `01-courtyard.png` 画上的玻璃缸（只有木底座、没有盖），物理墙隐形。球是不透明玻璃弹珠，图标贴在曲面上随球滚。合成音是短玻璃叮。

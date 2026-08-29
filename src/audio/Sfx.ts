@@ -74,25 +74,53 @@ export class Sfx {
     }
   }
 
+  /** Short bright glass-combine: high ding + sparkle. Not a musical arpeggio. */
   merge(tier: number): void {
     const ctx = this.dest();
     if (!ctx) return;
     const now = ctx.currentTime;
-    const vol = Math.min(0.42, 0.12 + tier * 0.028);
-    const base = 320 + tier * 36;
-    for (const [i, f] of [base, base * 1.5].entries()) {
+    const t = Math.max(0, Math.min(1, (tier - 1) / 9));
+    const vol = 0.09 + t * 0.07;
+    const dur = 0.12 + t * 0.08; // < 0.25s
+    const f0 = 2050 + t * 950;
+
+    const ratios = [1, 1.52, 2.18];
+    for (let i = 0; i < 3; i++) {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
-      osc.type = i === 0 ? "sine" : "triangle";
+      osc.type = "sine";
+      const f = f0 * ratios[i];
       osc.frequency.setValueAtTime(f, now);
-      osc.frequency.exponentialRampToValueAtTime(f * 1.25, now + 0.16);
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(vol / (i + 1), now + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      osc.frequency.exponentialRampToValueAtTime(f * 0.97, now + dur);
+      const pvol = vol * (0.62 / (i + 1));
+      g.gain.setValueAtTime(Math.max(0.0001, pvol), now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
       osc.connect(g).connect(ctx.destination);
       osc.start(now);
-      osc.stop(now + 0.3);
+      osc.stop(now + dur + 0.02);
     }
+
+    const nLen = Math.max(32, Math.floor(ctx.sampleRate * 0.055));
+    const buf = ctx.createBuffer(1, nLen, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < nLen; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (nLen * 0.2));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 4500;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 5600 + t * 900;
+    bp.Q.value = 1.35;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(vol * 0.5, now);
+    ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    src.connect(hp).connect(bp).connect(ng).connect(ctx.destination);
+    src.start(now);
+    src.stop(now + 0.07);
   }
 
   shatter(): void {
