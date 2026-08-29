@@ -23,7 +23,7 @@
 #hud .score-block,
 #hud .time-block,
 #hud .next {
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 248, 232, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 6px 16px rgba(70, 140, 200, 0.18);
   backdrop-filter: blur(10px);
@@ -181,10 +181,12 @@
 #hud .title {
   font-size: 32px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   margin: 0 0 8px;
-  color: #2a7ad4;
-  text-shadow: 0 2px 0 #fff, 0 8px 16px rgba(80, 160, 220, 0.28);
+  color: #3aa0ff;
+  -webkit-text-stroke: 2px #fff;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 #1e6fd4, 0 8px 16px rgba(80, 160, 220, 0.35);
 }
 
 #hud .sub {

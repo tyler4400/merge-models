@@ -16,6 +16,7 @@ import HavokPhysics from "@babylonjs/havok";
 import { CAMERA, GRAVITY_Y, VIEW } from "../game/constants";
 import { Game } from "../game/Game";
 import { buildContainer } from "../game/physics";
+import { makeSkyBackdrop } from "./skyBackdrop";
 
 export type App = {
   scene: Scene;
@@ -29,6 +30,7 @@ export async function createApp(
 ): Promise<App> {
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.55, 0.80, 0.96, 1);
+  makeSkyBackdrop(scene);
   scene.environmentTexture = makeDayEnv(scene);
   scene.environmentIntensity = 1.15;
 

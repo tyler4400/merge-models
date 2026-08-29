@@ -39,7 +39,7 @@ function iconTexture(scene: Scene, tier: TierId): DynamicTexture {
     ctx.arc(size / 2, size / 2, box / 2, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.fill();
     const iw = img.naturalWidth || img.width;
     const ih = img.naturalHeight || img.height;
@@ -59,21 +59,21 @@ function glassMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const def = getTier(tier);
   const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
   const m = new PBRMaterial(`glass-${id}`, scene);
-  m.albedoColor = Color3.Lerp(new Color3(0.92, 0.96, 1), tint, 0.28);
+  m.albedoColor = Color3.Lerp(new Color3(0.78, 0.9, 1), tint, 0.62);
   m.metallic = 0;
   m.roughness = 0.05;
   m.indexOfRefraction = 1.52;
-  m.alpha = 0.22;
+  m.alpha = 0.42;
   m.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
   m.subSurface.isRefractionEnabled = true;
   m.subSurface.refractionIntensity = 0.8;
   m.subSurface.indexOfRefraction = 1.52;
-  m.subSurface.tintColor = Color3.Lerp(new Color3(1, 1, 1), tint, 0.45);
+  m.subSurface.tintColor = Color3.Lerp(new Color3(0.92, 0.96, 1), tint, 0.7);
   m.clearCoat.isEnabled = true;
   m.clearCoat.intensity = 0.9;
   m.clearCoat.roughness = 0.06;
   m.environmentIntensity = 1.15;
-  m.emissiveColor = tint.scale(0.06);
+  m.emissiveColor = tint.scale(0.16);
   m.backFaceCulling = false;
   return m;
 }
@@ -82,10 +82,10 @@ function coreMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const def = getTier(tier);
   const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
   const m = new PBRMaterial(`core-${id}`, scene);
-  m.albedoColor = Color3.Lerp(new Color3(1, 1, 1), tint, 0.72);
+  m.albedoColor = Color3.Lerp(new Color3(0.95, 0.97, 1), tint, 0.88);
   m.metallic = 0.08;
   m.roughness = 0.28;
-  m.emissiveColor = tint.scale(0.18);
+  m.emissiveColor = tint.scale(0.32);
   m.environmentIntensity = 0.85;
   return m;
 }
@@ -147,7 +147,7 @@ export class Ball {
     dm.diffuseTexture = tex;
     dm.opacityTexture = tex;
     dm.emissiveTexture = tex;
-    dm.emissiveColor = new Color3(0.7, 0.7, 0.7);
+    dm.emissiveColor = new Color3(1, 1, 1);
     dm.specularColor = new Color3(0, 0, 0);
     dm.backFaceCulling = false;
     dm.useAlphaFromDiffuseTexture = true;
