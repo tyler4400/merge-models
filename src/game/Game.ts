@@ -409,7 +409,7 @@ export class Game {
       this.hud.setScore(this.score);
       this.hud.toast("T-800 对撞 +5000");
       this.sfx.merge(10);
-      this.shatter.burst(mid, 1.7);
+      this.shatter.ring(mid, 1.7);
       return;
     }
 
@@ -420,7 +420,7 @@ export class Game {
     this.hud.setScore(this.score);
     this.hud.toast(getTier(next).name);
     this.sfx.merge(next);
-    this.shatter.burst(mid, getTier(next).radius * 0.55);
+    this.shatter.ring(mid, getTier(next).radius);
 
     const spawned = new Ball(this.scene, next, mid.add(new Vector3(0, 0.12, 0)));
     spawned.mesh.scaling.setAll(0.08);

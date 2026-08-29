@@ -99,6 +99,7 @@ export class Ball {
   /** Curved icon on the camera-facing side. Kept as `face` for Game.ts. */
   readonly face: Mesh;
   readonly core: Mesh;
+  readonly glint: Mesh;
   aggregate: PhysicsAggregate | null = null;
   merging = false;
   held = false;
@@ -155,6 +156,23 @@ export class Ball {
     decal.isPickable = false;
     decal.setParent(mesh);
     this.face = decal;
+
+    const glint = MeshBuilder.CreateSphere(
+      `glint-${this.id}`,
+      { diameter: def.radius * 0.42, segments: 10 },
+      scene,
+    );
+    glint.parent = mesh;
+    glint.position.set(def.radius * 0.42, def.radius * 0.38, def.radius * 0.18);
+    const gm = new StandardMaterial(`glint-mat-${this.id}`, scene);
+    gm.disableLighting = true;
+    gm.emissiveColor = new Color3(1, 1, 1);
+    gm.diffuseColor = new Color3(0, 0, 0);
+    gm.alpha = 0.55;
+    gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+    glint.material = gm;
+    glint.isPickable = false;
+    this.glint = glint;
   }
 
   enablePhysics(scene: Scene): void {
@@ -212,6 +230,7 @@ export class Ball {
     this.aggregate?.dispose();
     this.aggregate = null;
     this.face.dispose();
+    this.glint.dispose();
     this.core.dispose();
     this.mesh.dispose();
   }

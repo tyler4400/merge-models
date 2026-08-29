@@ -26,9 +26,11 @@ export class HammerStock {
 }
 
 type Shard = { mesh: Mesh; vel: Vector3; life: number; mat: StandardMaterial };
+type Ring = { mesh: Mesh; mat: StandardMaterial; t: number; dur: number; r0: number; r1: number };
 
 export class ShatterFx {
   private shards: Shard[] = [];
+  private rings: Ring[] = [];
   private readonly scene: Scene;
 
   constructor(scene: Scene) {
@@ -59,8 +61,40 @@ export class ShatterFx {
     }
   }
 
+  /** Glass refraction ring — no sticker stars. */
+  ring(at: Vector3, radius: number): void {
+    const mesh = MeshBuilder.CreateTorus(
+      `ring-${Math.random().toString(36).slice(2, 7)}`,
+      { diameter: radius * 0.7, thickness: radius * 0.07, tessellation: 40 },
+      this.scene,
+    );
+    mesh.position.copyFrom(at);
+    mesh.rotation.z = Math.PI / 2;
+    const mat = new StandardMaterial(`ring-mat-${mesh.uniqueId}`, this.scene);
+    mat.disableLighting = true;
+    mat.emissiveColor = new Color3(0.75, 0.95, 1);
+    mat.alpha = 0.85;
+    mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+    mesh.material = mat;
+    mesh.isPickable = false;
+    this.rings.push({ mesh, mat, t: 0, dur: 0.38, r0: 0.35, r1: 2.15 });
+  }
+
   tick(dt: number): void {
     const grav = -14;
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const r = this.rings[i];
+      r.t += dt;
+      const x = Math.min(1, r.t / r.dur);
+      const s = r.r0 + (r.r1 - r.r0) * x;
+      r.mesh.scaling.setAll(s);
+      r.mat.alpha = 0.85 * (1 - x);
+      if (x >= 1) {
+        r.mesh.dispose();
+        r.mat.dispose();
+        this.rings.splice(i, 1);
+      }
+    }
     for (let i = this.shards.length - 1; i >= 0; i--) {
       const s = this.shards[i];
       s.life -= dt;
