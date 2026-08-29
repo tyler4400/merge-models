@@ -18,6 +18,49 @@ let nextId = 1;
 const iconCache = new Map<number, DynamicTexture>();
 const iconImages = new Map<number, HTMLImageElement>();
 
+/** Punch near-black that touches transparent (clip edge), so K/ChatGPT glyphs sit on glass. */
+function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void {
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  const dark = (i: number): boolean => d[i] < 22 && d[i + 1] < 22 && d[i + 2] < 22 && d[i + 3] > 10;
+  const trans = (i: number): boolean => d[i + 3] < 10;
+  const seen = new Uint8Array(size * size);
+  const stack: number[] = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const p = y * size + x;
+      const i = p * 4;
+      if (!dark(i)) continue;
+      const edge =
+        x === 0 ||
+        y === 0 ||
+        x === size - 1 ||
+        y === size - 1 ||
+        (x > 0 && trans((p - 1) * 4)) ||
+        (x < size - 1 && trans((p + 1) * 4)) ||
+        (y > 0 && trans((p - size) * 4)) ||
+        (y < size - 1 && trans((p + size) * 4));
+      if (edge) stack.push(p);
+    }
+  }
+  if (!stack.length) return;
+  while (stack.length) {
+    const p = stack.pop()!;
+    if (seen[p]) continue;
+    seen[p] = 1;
+    const i = p * 4;
+    if (!dark(i)) continue;
+    d[i + 3] = 0;
+    const x = p % size;
+    const y = (p / size) | 0;
+    if (x > 0) stack.push(p - 1);
+    if (x < size - 1) stack.push(p + 1);
+    if (y > 0) stack.push(p - size);
+    if (y < size - 1) stack.push(p + size);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 function paintIcon(ctx: CanvasRenderingContext2D, img: HTMLImageElement, size: number): void {
   ctx.clearRect(0, 0, size, size);
   const pad = 8;
@@ -38,6 +81,7 @@ function paintIcon(ctx: CanvasRenderingContext2D, img: HTMLImageElement, size: n
   const sy = (ih - src) / 2;
   ctx.drawImage(img, sx, sy, src, src, pad, pad, box, box);
   ctx.restore();
+  knockOutDarkBackdrop(ctx, size);
 }
 
 function ensureImage(tier: TierId, url: string): HTMLImageElement {
@@ -94,16 +138,17 @@ function glassMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const m = new PBRMaterial(`glass-${id}`, scene);
   m.albedoColor = tint;
   m.metallic = 0;
-  m.roughness = 0.14;
+  m.roughness = 0.2;
   m.indexOfRefraction = 1.5;
   m.alpha = 1;
   m.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
   m.subSurface.isRefractionEnabled = false;
   m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 1;
-  m.clearCoat.roughness = 0.05;
-  m.environmentIntensity = 1.15;
-  m.emissiveColor = tint.scale(0.32);
+  m.clearCoat.intensity = 0.72;
+  m.clearCoat.roughness = 0.08;
+  m.environmentIntensity = 0.22;
+  m.directIntensity = 0.18;
+  m.emissiveColor = tint.scale(0.82);
   m.backFaceCulling = true;
   return m;
 }
@@ -130,17 +175,17 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   dm.disableLighting = true;
   dm.backFaceCulling = true;
   dm.useAlphaFromDiffuseTexture = true;
-  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHATESTANDBLEND;
+  dm.alphaCutOff = 0.18;
   dm.disableDepthWrite = false;
-  dm.alphaCutOff = 0.12;
-  dm.zOffset = -2;
+  dm.zOffset = -4;
   return dm;
 }
 
 function stampLogo(mesh: Mesh, name: string, radius: number, toward: Vector3, mat: StandardMaterial): Mesh {
-  const s = radius * 1.16;
+  const s = radius * 1.2;
   const decal = MeshBuilder.CreateDecal(name, mesh, {
-    position: toward.scale(radius * 0.98),
+    position: toward.scale(radius),
     normal: toward,
     size: new Vector3(s, s, s),
     localMode: true,
@@ -214,7 +259,7 @@ export class Ball {
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
-      { diameter: def.radius * 0.38, segments: 10 },
+      { diameter: def.radius * 0.28, segments: 10 },
       scene,
     );
     glint.parent = mesh;
@@ -223,7 +268,7 @@ export class Ball {
     gm.disableLighting = true;
     gm.emissiveColor = new Color3(1, 1, 1);
     gm.diffuseColor = new Color3(0, 0, 0);
-    gm.alpha = 0.55;
+    gm.alpha = 0.45;
     gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
     gm.disableDepthWrite = true;
     glint.material = gm;

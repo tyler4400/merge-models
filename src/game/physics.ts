@@ -49,13 +49,13 @@ function boxWall(
 }
 
 function verticalStreak(scene: Scene, name: string, h: number): Mesh {
-  const mesh = MeshBuilder.CreateBox(name, { width: 0.11, height: h * 0.9, depth: 0.16 }, scene);
+  const mesh = MeshBuilder.CreateBox(name, { width: 0.18, height: h * 0.9, depth: 0.2 }, scene);
   const mat = new StandardMaterial(name + "-mat", scene);
   mat.disableLighting = true;
   mat.diffuseColor = new Color3(0.82, 0.94, 1);
   mat.emissiveColor = new Color3(0.88, 0.97, 1);
   mat.specularColor = new Color3(0, 0, 0);
-  mat.alpha = 0.38;
+  mat.alpha = 0.55;
   mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   mat.disableDepthWrite = true;
   mat.backFaceCulling = false;
