@@ -135,9 +135,10 @@ export class Ball {
     core.isPickable = false;
     this.core = core;
 
-    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.15 }, scene);
+    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.25 }, scene);
     face.parent = mesh;
-    face.position.set(0, 0, def.radius * 0.86);
+    face.position.set(0, 0, 0);
+    face.billboardMode = 7;
     const dm = new StandardMaterial("face-mat-" + String(this.id), scene);
     const tex = iconTexture(scene, tier);
     dm.diffuseTexture = tex;
