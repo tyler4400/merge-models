@@ -28,7 +28,7 @@ export async function createApp(
   hud: HTMLElement,
 ): Promise<App> {
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.78, 0.9, 0.98, 1);
+  scene.clearColor = new Color4(0, 0, 0, 0);
   scene.environmentTexture = makeDayEnv(scene);
   scene.environmentIntensity = 1.15;
 

@@ -8,6 +8,7 @@ if (!(canvas instanceof HTMLCanvasElement)) {
 }
 
 const engine = new Engine(canvas, true, {
+  alpha: true,
   preserveDrawingBuffer: true,
   stencil: true,
   adaptToDeviceRatio: true,
