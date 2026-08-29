@@ -1,0 +1,12 @@
+# Build / deps
+/node_modules
+/dist
+*.local
+.env
+.env.*
+
+# Capture output (generated, not source)
+/screenshots
+
+# Host-agent leftovers we do not ship
+.codex
