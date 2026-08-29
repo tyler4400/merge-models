@@ -198,17 +198,17 @@
   position: absolute;
   left: calc(52 / 390 * 100%);
   width: calc(286 / 390 * 100%);
+  /* top is set from SCREEN.jarTop / FAIL_LINE_Y in hud.ts so the caption sits on the 3D mesh */
   top: calc(180 / 844 * 100%);
   height: 0;
-  border-top: 2.5px dashed rgba(255, 48, 40, 0.92);
   pointer-events: none;
   z-index: 1;
 }
 #hud .fail-mark span {
   position: absolute;
   left: 50%;
-  top: -16px;
-  transform: translateX(-50%);
+  top: 0;
+  transform: translate(-50%, -50%);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;

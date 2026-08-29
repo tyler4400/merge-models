@@ -54,6 +54,8 @@ function boxWall(
 function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: "lip" | "base"): void {
   ctx.fillStyle = "#7a4520";
   ctx.fillRect(0, 0, tw, th);
+  ctx.lineCap = "butt";
+  // Grain is U-periodic (integer cycles over tw) so WRAP at u=0/1 is seamless.
   for (let i = 0; i < 90; i++) {
     const y0 = (i / 90) * th;
     const wobble = Math.sin(i * 1.37) * 5 + Math.sin(i * 0.41) * 9;
@@ -62,11 +64,15 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
     const b = 36 + (i % 3) * 6;
     ctx.strokeStyle = `rgba(${r},${g},${b},${0.22 + (i % 4) * 0.05})`;
     ctx.lineWidth = 1.2 + (i % 4);
+    const c1 = 4 + (i % 3);
+    const c2 = 1 + (i % 2);
     ctx.beginPath();
-    ctx.moveTo(0, y0 + wobble);
-    for (let x = 0; x <= tw; x += 6) {
-      const y = y0 + wobble + Math.sin(x * 0.045 + i * 0.7) * 4.5 + Math.sin(x * 0.012 + i) * 10;
-      ctx.lineTo(x, y);
+    const pad = 12;
+    for (let x = -pad; x <= tw + pad; x += 4) {
+      const t = (x / tw) * Math.PI * 2;
+      const y = y0 + wobble + Math.sin(t * c1 + i * 0.7) * 4.5 + Math.sin(t * c2 + i) * 10;
+      if (x === -pad) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
     ctx.stroke();
   }
@@ -74,9 +80,11 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
     const kx = 40 + k * 90 + (k % 2) * 20;
     const ky = 30 + (k * 47) % (th - 50);
     ctx.fillStyle = "rgba(90, 42, 16, 0.18)";
-    ctx.beginPath();
-    ctx.ellipse(kx, ky, 11, 5.5, k * 0.4, 0, Math.PI * 2);
-    ctx.fill();
+    for (const ox of [-tw, 0, tw]) {
+      ctx.beginPath();
+      ctx.ellipse(kx + ox, ky, 11, 5.5, k * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   if (kind === "lip") {
     // V wraps the tube: v=0.5 is the outer equator (camera-facing on the front arc).
@@ -325,7 +333,8 @@ export function buildContainer(scene: Scene): ContainerRig {
     scene,
   );
   rim.position.set(0, h + 0.08, 0);
-  rim.rotation.y = Math.PI; // UV seam to the back, hole stays along +Y
+  // CreateTorus UV u=0 is at +Z; rotate so the wrap sits at -Z (away from camera).
+  rim.rotation.y = Math.PI;
   rim.material = rimWood;
   rim.isPickable = false;
 
@@ -353,6 +362,7 @@ export function buildContainer(scene: Scene): ContainerRig {
     scene,
   );
   baseRing.position.set(0, -0.64, 0);
+  baseRing.rotation.y = Math.PI; // same UV seam hide as the lip
   baseRing.material = rimWood;
   baseRing.isPickable = false;
 

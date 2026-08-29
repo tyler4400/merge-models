@@ -1,5 +1,6 @@
 /** HTML overlay: score, time, next, bottom hammer count, toast, title / win / lose. */
 import "./hud.css";
+import { FAIL_LINE_Y, SCREEN, TANK } from "../game/constants";
 import { tierDef, type TierId } from "../game/tiers";
 
 export type HudHandlers = {
@@ -128,6 +129,11 @@ export class Hud {
     this.aimHint = root.querySelector("[data-aim]")!;
     this.hammerBtn = root.querySelector("[data-hammer]")!;
     this.hammerCount = root.querySelector("[data-hammer-count]")!;
+
+    const failEl = root.querySelector(".fail-mark") as HTMLElement;
+    const worldPerPx = TANK.innerWidth / SCREEN.jarInnerW;
+    const failTopPx = SCREEN.jarTop + (TANK.innerHeight - FAIL_LINE_Y) / worldPerPx;
+    failEl.style.top = `${(failTopPx / SCREEN.h) * 100}%`;
 
     this.hammerBtn.addEventListener("click", (e) => {
       e.stopPropagation();
