@@ -135,11 +135,11 @@ export class Ball {
     core.isPickable = false;
     this.core = core;
 
-    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.72 }, scene);
+    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.55 }, scene);
     face.parent = mesh;
-    face.position.set(0, 0, 0);
-    face.billboardMode = 7;
-    face.renderingGroupId = 1;
+    face.position.set(0, 0, def.radius * 0.84);
+    face.billboardMode = 0;
+    face.renderingGroupId = 0;
     const dm = new StandardMaterial("face-mat-" + String(this.id), scene);
     const tex = iconTexture(scene, tier);
     dm.diffuseTexture = tex;
@@ -151,7 +151,7 @@ export class Ball {
     dm.useAlphaFromDiffuseTexture = true;
     dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
     face.material = dm;
-    dm.disableDepthWrite = true;
+    dm.disableDepthWrite = false;
     face.isPickable = false;
     this.face = face;
 

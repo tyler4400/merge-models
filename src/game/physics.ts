@@ -2,7 +2,7 @@
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { PhysicsAggregate } from "@babylonjs/core/Physics/v2/physicsAggregate";
 import { PhysicsShapeType } from "@babylonjs/core/Physics/v2/IPhysicsEnginePlugin";
@@ -80,15 +80,13 @@ export function buildContainer(scene: Scene): ContainerRig {
   backW.visibility = 0;
   floor.visibility = 0;
 
-  const body = MeshBuilder.CreateCylinder("jar-body", { height: h, diameter: w + t, tessellation: 48 }, scene);
-  body.position.set(0, midY, 0);
+  const body = MeshBuilder.CreateTube("jar-body", { path: [new Vector3(0, 0, 0), new Vector3(0, h, 0)], radius: (w + t) / 2, tessellation: 48, cap: 0 }, scene);
   body.material = glass;
   body.isPickable = false;
   body.visibility = 0.9;
 
-  const rim = MeshBuilder.CreateTorus("jar-rim", { diameter: w + t * 0.15, thickness: 0.62, tessellation: 48 }, scene);
-  rim.rotation.x = Math.PI / 2;
-  rim.position.set(0, h + 0.1, 0);
+  const rim = MeshBuilder.CreateBox("jar-rim", { width: w + t * 2.2, height: 0.42, depth: d + t * 2.2 }, scene);
+  rim.position.set(0, h + 0.18, 0);
   rim.material = wood;
   rim.isPickable = false;
 

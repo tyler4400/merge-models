@@ -50,6 +50,7 @@ export class Game {
   keyLeft = false;
   keyRight = false;
   smashLock = 0;
+  dropLock = 0;
   private grows: Array<{ ball: Ball; t: number }> = [];
   private fades: Array<{ ball: Ball; t: number }> = [];
   pending: Ball | null = null;
@@ -140,6 +141,7 @@ export class Game {
     this.shatter.tick(dt);
     this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
+    if (this.dropLock > 0) this.dropLock = Math.max(0, this.dropLock - dt);
     if (this.phase === "title" || this.freeze) return;
 
     if (this.timing && (this.phase === "playing" || this.phase === "hammerAim")) {
@@ -235,7 +237,7 @@ export class Game {
 
   private canDrop(): boolean {
     if (this.phase !== "playing" || !this.held || this.smashLock > 0) return false;
-    return this.pending === null;
+    return this.dropLock <= 0;
   }
 
   private spawnHeld(): void {
@@ -300,6 +302,7 @@ export class Game {
     this.pending = ball;
     this.pendingAge = 0;
     this.pendingSettledFor = 0;
+    this.dropLock = 0.16;
     this.combo = 0;
     if (!this.timing) this.timing = true;
     this.spawnHeld();
