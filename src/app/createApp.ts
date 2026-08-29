@@ -3,6 +3,7 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { Color3, Color4, Vector3 } from "@babylonjs/core/Maths/math";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
+import { Camera } from "@babylonjs/core/Cameras/camera";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
@@ -12,7 +13,7 @@ import "@babylonjs/core/Physics/v2/physicsEngineComponent";
 import "@babylonjs/core/Materials/PBR/pbrSubSurfaceConfiguration";
 import "@babylonjs/core/Materials/PBR/pbrClearCoatConfiguration";
 import HavokPhysics from "@babylonjs/havok";
-import { CAMERA, GRAVITY_Y } from "../game/constants";
+import { CAMERA, GRAVITY_Y, VIEW } from "../game/constants";
 import { Game } from "../game/Game";
 import { buildContainer } from "../game/physics";
 
@@ -47,6 +48,11 @@ export async function createApp(
   camera.upperRadiusLimit = CAMERA.radius;
   camera.attachControl(canvas, false);
   camera.inputs.clear();
+  camera.mode = Camera.ORTHOGRAPHIC_CAMERA;
+  camera.orthoLeft = -VIEW.halfW;
+  camera.orthoRight = VIEW.halfW;
+  camera.orthoBottom = VIEW.yMin;
+  camera.orthoTop = VIEW.yMax;
 
   const hemi = new HemisphericLight("hemi", new Vector3(0.25, 1, 0.4), scene);
   hemi.intensity = 1.05;
