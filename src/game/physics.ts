@@ -61,9 +61,10 @@ export function buildContainer(scene: Scene): ContainerRig {
   const ghost = wallMat(scene, "wall-front", new Color3(0.85, 0.95, 1), 0.08);
 
   const wood = new StandardMaterial("jar-wood", scene);
-  wood.diffuseColor = new Color3(0.72, 0.48, 0.22);
-  wood.emissiveColor = new Color3(0.28, 0.16, 0.06);
-  wood.specularColor = new Color3(0.35, 0.22, 0.1);
+  wood.disableLighting = true;
+  wood.diffuseColor = new Color3(0.55, 0.32, 0.14);
+  wood.emissiveColor = new Color3(0.48, 0.28, 0.12);
+  wood.specularColor = new Color3(0, 0, 0);
 
   const root = MeshBuilder.CreateBox("container-root", { width: 0.01, height: 0.01, depth: 0.01 }, scene);
   root.isVisible = false;
@@ -73,24 +74,30 @@ export function buildContainer(scene: Scene): ContainerRig {
   const right = boxWall(scene, "wall-R", new Vector3(t, h + t, d + t * 2), new Vector3(w / 2 + t / 2, midY, 0), glass);
   const backW = boxWall(scene, "wall-B", new Vector3(w, h + t, t), new Vector3(0, midY, -d / 2 - t / 2), back);
   const front = boxWall(scene, "wall-F", new Vector3(w, h + t, t), new Vector3(0, midY, d / 2 + t / 2), ghost);
-  front.visibility = 0.12;
-  left.visibility = 1;
-  right.visibility = 1;
-  backW.visibility = 0.35;
-  floor.visibility = 1;
+  front.visibility = 0;
+  left.visibility = 0;
+  right.visibility = 0;
+  backW.visibility = 0;
+  floor.visibility = 0;
 
-  const rim = MeshBuilder.CreateTorus("jar-rim", { diameter: w + t, thickness: t * 1.35, tessellation: 48 }, scene);
+  const body = MeshBuilder.CreateCylinder("jar-body", { height: h, diameter: w + t, tessellation: 48 }, scene);
+  body.position.set(0, midY, 0);
+  body.material = glass;
+  body.isPickable = false;
+  body.visibility = 0.9;
+
+  const rim = MeshBuilder.CreateTorus("jar-rim", { diameter: w + t * 0.15, thickness: 0.62, tessellation: 48 }, scene);
   rim.rotation.x = Math.PI / 2;
-  rim.position.set(0, h + t * 0.15, 0);
+  rim.position.set(0, h + 0.1, 0);
   rim.material = wood;
   rim.isPickable = false;
 
-  const base = MeshBuilder.CreateCylinder("jar-base", { diameter: w + t * 3.2, height: t * 1.6, tessellation: 32 }, scene);
-  base.position.set(0, -t * 1.1, 0);
+  const base = MeshBuilder.CreateCylinder("jar-base", { diameter: w + t * 2.6, height: 0.72, tessellation: 32 }, scene);
+  base.position.set(0, -0.45, 0);
   base.material = wood;
   base.isPickable = false;
 
-  for (const m of [floor, left, right, backW, front, rim, base]) m.parent = root;
+  for (const m of [floor, left, right, backW, front, body, rim, base]) m.parent = root;
 
   const failLine = MeshBuilder.CreateBox("fail-line", { width: w - 0.08, height: 0.045, depth: d + 0.2 }, scene);
   failLine.position.set(0, 0, 0);

@@ -18,7 +18,7 @@ export const TANK = {
   innerWidth: INNER_W,
   innerHeight: INNER_W * (SCREEN.jarInnerH / SCREEN.jarInnerW),
   innerDepth: 4.5,
-  wall: INNER_W * (18 / SCREEN.jarInnerW),
+  wall: INNER_W * (28 / SCREEN.jarInnerW),
 } as const;
 
 const WORLD_PER_PX = TANK.innerWidth / SCREEN.jarInnerW;
