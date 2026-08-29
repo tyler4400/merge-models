@@ -15,6 +15,7 @@ import "@babylonjs/core/Materials/PBR/pbrClearCoatConfiguration";
 import HavokPhysics from "@babylonjs/havok";
 import { CAMERA, GRAVITY_Y, VIEW } from "../game/constants";
 import { Game } from "../game/Game";
+import { preloadBallIcons } from "../game/Ball";
 import { buildContainer } from "../game/physics";
 import { makeSkyBackdrop } from "./skyBackdrop";
 
@@ -77,6 +78,7 @@ export async function createApp(
   const rig = buildContainer(scene);
   rig.failLine.isVisible = true;
 
+  await preloadBallIcons(scene);
   const game = new Game(scene, canvas, hud);
   scene.onBeforeRenderObservable.add(() => {
     game.tick(engine.getDeltaTime());

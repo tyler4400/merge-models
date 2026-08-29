@@ -254,7 +254,7 @@ export class Game {
     const ghost = new Ball(this.scene, tier, pos);
     ghost.held = true;
     ghost.mesh.visibility = 0.2;
-    ghost.face.visibility = 0;
+    ghost.setLogoVisible(0);
     this.ghost = ghost;
     this.syncHeld();
     this.hud.setNext(this.queue.peek() as TierId);

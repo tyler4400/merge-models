@@ -55,7 +55,7 @@ export function buildContainer(scene: Scene): ContainerRig {
   const t = TANK.wall;
   const midY = h / 2;
 
-  const glass = wallMat(scene, "wall-glass", new Color3(0.72, 0.9, 1), 0.42);
+  const glass = wallMat(scene, "wall-glass", new Color3(0.78, 0.93, 1), 0.58);
   const floorMat = wallMat(scene, "wall-floor", new Color3(0.78, 0.92, 1), 0.5);
   const back = wallMat(scene, "wall-back", new Color3(0.8, 0.92, 1), 0.16);
   const ghost = wallMat(scene, "wall-front", new Color3(0.85, 0.95, 1), 0.08);
@@ -83,7 +83,7 @@ export function buildContainer(scene: Scene): ContainerRig {
   const body = MeshBuilder.CreateTube("jar-body", { path: [new Vector3(0, 0, 0), new Vector3(0, h, 0)], radius: (w + t) / 2, tessellation: 48, cap: 0 }, scene);
   body.material = glass;
   body.isPickable = false;
-  body.visibility = 0.9;
+  body.visibility = 1;
 
   const rim = MeshBuilder.CreateBox("jar-rim", { width: w + t * 2.2, height: 0.42, depth: d + t * 2.2 }, scene);
   rim.position.set(0, h + 0.18, 0);
