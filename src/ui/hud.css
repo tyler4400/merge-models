@@ -183,8 +183,8 @@
   font-weight: 800;
   letter-spacing: 0.06em;
   margin: 0 0 8px;
-  color: #3aa0ff;
-  -webkit-text-stroke: 2px #fff;
+  color: #2b8cff;
+  -webkit-text-stroke: 5px #fff;
   paint-order: stroke fill;
   text-shadow: 0 3px 0 #1e6fd4, 0 8px 16px rgba(80, 160, 220, 0.35);
 }
