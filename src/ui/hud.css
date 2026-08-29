@@ -4,7 +4,7 @@
   z-index: 2;
   pointer-events: none;
   font-family: "PingFang SC", "Noto Sans SC", "Source Han Sans SC", system-ui, sans-serif;
-  color: #142033;
+  color: #1e4b7a;
 }
 
 #hud .bar {
@@ -13,7 +13,6 @@
   left: 0;
   right: 0;
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
   height: calc(72 / 844 * 100%);
   padding: 8px 12px 0;
@@ -24,24 +23,24 @@
 #hud .score-block,
 #hud .time-block,
 #hud .next {
-  background: rgba(255, 255, 255, 0.92);
-  border: 2px solid #142033;
-  box-shadow: 0 4px 0 #142033;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 16px rgba(70, 140, 200, 0.18);
+  backdrop-filter: blur(10px);
 }
 
 #hud .score-block {
   flex: 1;
   min-width: 0;
-  border-radius: 14px;
-  padding: 8px 12px;
+  border-radius: 18px;
+  padding: 6px 10px;
 }
 
 #hud .label {
   font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #3a4a63;
-  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #5a8ab8;
+  font-weight: 600;
 }
 
 #hud .score {
@@ -49,19 +48,20 @@
   font-weight: 750;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
+  color: #1e4b7a;
 }
 
 #hud .time-block {
   text-align: center;
-  padding: 8px 14px;
-  border-radius: 14px;
+  padding: 6px 12px;
+  border-radius: 18px;
 }
 
 #hud .time {
   font-size: 18px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
+  color: #1e4b7a;
 }
 
 #hud .right {
@@ -69,25 +69,24 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  min-width: 88px;
+  align-items: stretch;
 }
 
 #hud .next {
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 14px;
-  padding: 6px 8px 6px 10px;
+  border-radius: 18px;
+  padding: 4px 8px 4px 10px;
 }
 
 #hud .next img {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   object-fit: cover;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid #142033;
+  box-shadow: 0 2px 8px rgba(70, 140, 200, 0.25);
 }
 
 #hud .next .name {
@@ -111,17 +110,17 @@
 
 #hud .hammer {
   pointer-events: auto;
-  min-width: 64px; width: 64px;
+  width: 64px;
   height: 64px;
-  border-radius: 18px;
-  border: 3px solid #142033;
-  background: #ffe14a;
-  color: #142033;
-  font-size: 22px;
+  min-width: 64px;
+  border-radius: 50%;
+  border: 0;
+  background: radial-gradient(circle at 35% 30%, #fff6c2, #ffd24a 55%, #f0b429);
+  color: #7a4a12;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: 0.04em;
   cursor: pointer;
-  box-shadow: 0 5px 0 #142033;
+  box-shadow: 0 8px 18px rgba(240, 170, 40, 0.45);
 }
 
 #hud .hammer[data-empty="1"] {
@@ -130,9 +129,8 @@
 }
 
 #hud .hammer.active {
-  background: #ff8a3d;
-  transform: translateY(2px);
-  box-shadow: 0 3px 0 #142033;
+  background: radial-gradient(circle at 35% 30%, #ffe0b0, #ff9a3d);
+  transform: scale(0.96);
 }
 
 #hud .toast {
@@ -140,11 +138,11 @@
   left: 50%;
   top: 38%;
   transform: translate(-50%, -50%);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #142033;
-  text-shadow: 0 2px 0 #fff, 0 8px 20px rgba(20, 32, 51, 0.18);
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(30, 90, 150, 0.45);
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
@@ -160,7 +158,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(215, 238, 252, 0.72);
+  background: rgba(180, 220, 245, 0.45);
   pointer-events: auto;
   padding: 24px;
 }
@@ -171,25 +169,27 @@
 
 #hud .card {
   width: min(360px, 100%);
-  background: #fff;
-  border: 3px solid #142033;
-  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 28px;
   padding: 28px 22px 22px;
   text-align: center;
-  box-shadow: 0 8px 0 #142033;
+  box-shadow: 0 18px 40px rgba(70, 140, 200, 0.22);
+  backdrop-filter: blur(12px);
 }
 
 #hud .title {
-  font-size: 34px;
+  font-size: 32px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   margin: 0 0 8px;
-  color: #142033;
+  color: #2a7ad4;
+  text-shadow: 0 2px 0 #fff, 0 8px 16px rgba(80, 160, 220, 0.28);
 }
 
 #hud .sub {
   margin: 0 0 22px;
-  color: #3a4a63;
+  color: #4a6f92;
   font-size: 14px;
   line-height: 1.55;
 }
@@ -202,9 +202,8 @@
 }
 
 #hud .stat {
-  background: #eef7ff;
-  border: 2px solid #142033;
-  border-radius: 12px;
+  background: rgba(230, 244, 255, 0.8);
+  border-radius: 16px;
   padding: 10px 4px;
 }
 
@@ -212,12 +211,13 @@
   display: block;
   font-size: 18px;
   font-variant-numeric: tabular-nums;
+  color: #1e4b7a;
 }
 
 #hud .stat span {
   font-size: 11px;
-  color: #3a4a63;
-  font-weight: 700;
+  color: #5a8ab8;
+  font-weight: 600;
 }
 
 #hud .actions {
@@ -230,7 +230,7 @@
 #hud button.ghost {
   pointer-events: auto;
   height: 48px;
-  border-radius: 14px;
+  border-radius: 999px;
   font-size: 16px;
   letter-spacing: 0.08em;
   cursor: pointer;
@@ -238,31 +238,31 @@
 }
 
 #hud button.cta {
-  background: #ff7a1a;
-  color: #142033;
-  border: 3px solid #142033;
-  box-shadow: 0 4px 0 #142033;
+  background: linear-gradient(180deg, #ffb24a, #ff8a1a);
+  color: #fff;
+  border: 0;
+  box-shadow: 0 8px 18px rgba(255, 140, 40, 0.35);
 }
 
 #hud button.ghost {
-  background: #fff;
-  color: #142033;
-  border: 3px solid #142033;
+  background: rgba(255, 255, 255, 0.7);
+  color: #1e4b7a;
+  border: 1px solid rgba(255, 255, 255, 0.95);
 }
 
 #hud .aim-hint {
   position: absolute;
   left: 50%;
-  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(88 / 844 * 100% + 8px);
   transform: translateX(-50%);
   font-size: 13px;
-  font-weight: 700;
-  color: #142033;
-  background: #fff;
-  border: 2px solid #142033;
+  font-weight: 600;
+  color: #1e4b7a;
+  background: rgba(255, 255, 255, 0.8);
   padding: 6px 12px;
   border-radius: 999px;
   display: none;
+  box-shadow: 0 6px 14px rgba(70, 140, 200, 0.18);
 }
 
 #hud .aim-hint.show {
@@ -270,10 +270,7 @@
 }
 
 @media (max-width: 420px) {
-  #hud .score {
-    font-size: 24px;
-  }
   #hud .title {
-    font-size: 18px;
+    font-size: 28px;
   }
 }

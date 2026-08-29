@@ -26,7 +26,7 @@ body {
   height: min(100dvh, calc(100vw * 844 / 390));
   transform: translate(-50%, -50%);
   overflow: hidden;
-  background: #d7eefc;
+  background: linear-gradient(180deg, #8ec8f4 0%, #d7eefc 42%, #c8e8b8 100%);
 }
 
 #game {
