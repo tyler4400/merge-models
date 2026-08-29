@@ -20,7 +20,7 @@ const iconImages = new Map<number, HTMLImageElement>();
 
 function paintIcon(ctx: CanvasRenderingContext2D, img: HTMLImageElement, size: number): void {
   ctx.clearRect(0, 0, size, size);
-  const pad = 18;
+  const pad = 8;
   const box = size - pad * 2;
   ctx.save();
   ctx.beginPath();
@@ -92,22 +92,19 @@ function glassMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const def = getTier(tier);
   const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
   const m = new PBRMaterial(`glass-${id}`, scene);
-  m.albedoColor = Color3.Lerp(new Color3(0.85, 0.93, 1), tint, 0.92);
+  m.albedoColor = tint;
   m.metallic = 0;
-  m.roughness = 0.06;
-  m.indexOfRefraction = 1.45;
-  m.alpha = 0.58;
-  m.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
-  m.subSurface.isRefractionEnabled = true;
-  m.subSurface.refractionIntensity = 0.42;
-  m.subSurface.indexOfRefraction = 1.45;
-  m.subSurface.tintColor = Color3.Lerp(new Color3(0.95, 0.97, 1), tint, 0.82);
+  m.roughness = 0.14;
+  m.indexOfRefraction = 1.5;
+  m.alpha = 1;
+  m.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+  m.subSurface.isRefractionEnabled = false;
   m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 0.85;
-  m.clearCoat.roughness = 0.08;
-  m.environmentIntensity = 1.2;
-  m.emissiveColor = tint.scale(0.42);
-  m.backFaceCulling = false;
+  m.clearCoat.intensity = 1;
+  m.clearCoat.roughness = 0.05;
+  m.environmentIntensity = 1.15;
+  m.emissiveColor = tint.scale(0.32);
+  m.backFaceCulling = true;
   return m;
 }
 
@@ -134,13 +131,14 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   dm.backFaceCulling = true;
   dm.useAlphaFromDiffuseTexture = true;
   dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  dm.disableDepthWrite = true;
+  dm.disableDepthWrite = false;
+  dm.alphaCutOff = 0.12;
   dm.zOffset = -2;
   return dm;
 }
 
 function stampLogo(mesh: Mesh, name: string, radius: number, toward: Vector3, mat: StandardMaterial): Mesh {
-  const s = radius * 1.22;
+  const s = radius * 1.16;
   const decal = MeshBuilder.CreateDecal(name, mesh, {
     position: toward.scale(radius * 0.98),
     normal: toward,
@@ -190,7 +188,7 @@ export class Ball {
 
     const core = MeshBuilder.CreateSphere(
       `core-${this.id}`,
-      { diameter: def.radius * 2 * 0.9, segments: 24 },
+      { diameter: def.radius * 2 * 0.96, segments: 24 },
       scene,
     );
     core.parent = mesh;
@@ -200,8 +198,18 @@ export class Ball {
     this.core = core;
 
     const dm = logoMat(scene, tier, this.id);
-    const face = stampLogo(mesh, "face-" + String(this.id), def.radius, new Vector3(0, 0, 1), dm);
-    stampLogo(mesh, "face-back-" + String(this.id), def.radius, new Vector3(0, 0, -1), dm);
+    const dirs: Array<[string, Vector3]> = [
+      ["z", new Vector3(0, 0, 1)],
+      ["zb", new Vector3(0, 0, -1)],
+      ["x", new Vector3(1, 0, 0)],
+      ["xb", new Vector3(-1, 0, 0)],
+      ["y", new Vector3(0, 1, 0)],
+      ["yb", new Vector3(0, -1, 0)],
+    ];
+    const face = stampLogo(mesh, "face-" + String(this.id), def.radius, dirs[0][1], dm);
+    for (const [tag, dir] of dirs.slice(1)) {
+      stampLogo(mesh, "face-" + tag + "-" + String(this.id), def.radius, dir, dm);
+    }
     this.face = face;
 
     const glint = MeshBuilder.CreateSphere(

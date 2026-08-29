@@ -48,6 +48,22 @@ function boxWall(
   return mesh;
 }
 
+function verticalStreak(scene: Scene, name: string, h: number): Mesh {
+  const mesh = MeshBuilder.CreateBox(name, { width: 0.11, height: h * 0.9, depth: 0.16 }, scene);
+  const mat = new StandardMaterial(name + "-mat", scene);
+  mat.disableLighting = true;
+  mat.diffuseColor = new Color3(0.82, 0.94, 1);
+  mat.emissiveColor = new Color3(0.88, 0.97, 1);
+  mat.specularColor = new Color3(0, 0, 0);
+  mat.alpha = 0.38;
+  mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  mat.disableDepthWrite = true;
+  mat.backFaceCulling = false;
+  mesh.material = mat;
+  mesh.isPickable = false;
+  return mesh;
+}
+
 export function buildContainer(scene: Scene): ContainerRig {
   const w = TANK.innerWidth;
   const h = TANK.innerHeight;
@@ -55,7 +71,7 @@ export function buildContainer(scene: Scene): ContainerRig {
   const t = TANK.wall;
   const midY = h / 2;
 
-  const glass = wallMat(scene, "wall-glass", new Color3(0.78, 0.93, 1), 0.58);
+  const glass = wallMat(scene, "wall-glass", new Color3(0.78, 0.93, 1), 0.62);
   const floorMat = wallMat(scene, "wall-floor", new Color3(0.78, 0.92, 1), 0.5);
   const back = wallMat(scene, "wall-back", new Color3(0.8, 0.92, 1), 0.16);
   const ghost = wallMat(scene, "wall-front", new Color3(0.85, 0.95, 1), 0.08);
@@ -80,7 +96,7 @@ export function buildContainer(scene: Scene): ContainerRig {
   backW.visibility = 0;
   floor.visibility = 0;
 
-  const body = MeshBuilder.CreateTube("jar-body", { path: [new Vector3(0, 0, 0), new Vector3(0, h, 0)], radius: (w + t) / 2, tessellation: 48, cap: 0 }, scene);
+  const body = MeshBuilder.CreateTube("jar-body", { path: [new Vector3(0, 0.04, 0), new Vector3(0, h - 0.06, 0)], radius: (w + t) / 2, tessellation: 48, cap: 0 }, scene);
   body.material = glass;
   body.isPickable = false;
   body.visibility = 1;
@@ -95,7 +111,13 @@ export function buildContainer(scene: Scene): ContainerRig {
   base.material = wood;
   base.isPickable = false;
 
-  for (const m of [floor, left, right, backW, front, body, rim, base]) m.parent = root;
+  const edgeX = (w + t) / 2 - 0.02;
+  const streakL = verticalStreak(scene, "jar-streak-L", h);
+  streakL.position.set(-edgeX, midY, 0.12);
+  const streakR = verticalStreak(scene, "jar-streak-R", h);
+  streakR.position.set(edgeX, midY, 0.12);
+
+  for (const m of [floor, left, right, backW, front, body, rim, base, streakL, streakR]) m.parent = root;
 
   const failLine = MeshBuilder.CreateBox("fail-line", { width: w - 0.08, height: 0.045, depth: d + 0.2 }, scene);
   failLine.position.set(0, 0, 0);
