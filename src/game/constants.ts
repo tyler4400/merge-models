@@ -50,12 +50,12 @@ export const REST = {
 } as const;
 
 export const PHYS = {
-  ballRestitution: 0.2,
-  ballFriction: 0.4,
+  ballRestitution: 0.34,
+  ballFriction: 0.62,
   wallRestitution: 0.08,
   wallFriction: 0.55,
-  linearDamping: 0.14,
-  angularDamping: 0.2,
+  linearDamping: 0.08,
+  angularDamping: 0.05,
   zSpring: 18,
   zDamp: 8,
 } as const;

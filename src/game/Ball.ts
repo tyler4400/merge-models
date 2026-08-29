@@ -173,6 +173,20 @@ export class Ball {
     tuneBallBody(agg.body);
     this.aggregate = agg;
     this.held = false;
+    this.nudgeSpin();
+  }
+
+  /** Random tumble so collisions read as glass orbs, not coins. */
+  nudgeSpin(scale = 1): void {
+    const body = this.aggregate?.body;
+    if (!body) return;
+    body.setAngularVelocity(
+      new Vector3(
+        (Math.random() - 0.5) * 10 * scale,
+        (Math.random() - 0.5) * 7 * scale,
+        (Math.random() - 0.5) * 10 * scale,
+      ),
+    );
   }
 
   applyPop(impulseY: number): void {
@@ -180,6 +194,9 @@ export class Ball {
     if (!body) return;
     const p = this.mesh.getAbsolutePosition();
     body.applyImpulse(new Vector3(0, impulseY * this.mass, 0), p);
+    const side = (Math.random() - 0.5) * 1.4 * this.mass;
+    body.applyImpulse(new Vector3(side, 0, 0), p);
+    this.nudgeSpin(1.4);
   }
 
   get body() {

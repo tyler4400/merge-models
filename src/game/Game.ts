@@ -50,6 +50,8 @@ export class Game {
   keyLeft = false;
   keyRight = false;
   smashLock = 0;
+  private grows: Array<{ ball: Ball; t: number }> = [];
+  private fades: Array<{ ball: Ball; t: number }> = [];
   pending: Ball | null = null;
   pendingAge = 0;
   pendingSettledFor = 0;
@@ -135,6 +137,7 @@ export class Game {
   tick(dtMs: number): void {
     const dt = Math.min(dtMs / 1000, 0.05);
     this.shatter.tick(dt);
+    this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
     if (this.phase === "title" || this.freeze) return;
 
@@ -193,6 +196,8 @@ export class Game {
     this.idMap.clear();
     this.bodyMap.clear();
     this.mergeQueue = [];
+    this.grows = [];
+    this.fades = [];
     this.combo = 0;
     this.smashLock = 0;
     this.pending = null;
@@ -391,8 +396,13 @@ export class Game {
     b.merging = true;
     const mid = plan.mid.clone();
     if (this.pending?.id === a.id || this.pending?.id === b.id) this.pending = null;
-    this.removeBall(a);
-    this.removeBall(b);
+    if (a.body) this.bodyMap.delete(a.body);
+    if (b.body) this.bodyMap.delete(b.body);
+    a.aggregate?.dispose();
+    a.aggregate = null;
+    b.aggregate?.dispose();
+    b.aggregate = null;
+    this.fades.push({ ball: a, t: 0 }, { ball: b, t: 0 });
 
     if (plan.kind === "t800-pair") {
       this.score += t800PairBonus();
@@ -410,15 +420,43 @@ export class Game {
     this.hud.setScore(this.score);
     this.hud.toast(getTier(next).name);
     this.sfx.merge(next);
+    this.shatter.burst(mid, getTier(next).radius * 0.55);
 
-    const spawned = new Ball(this.scene, next, mid.add(new Vector3(0, 0.1, 0)));
+    const spawned = new Ball(this.scene, next, mid.add(new Vector3(0, 0.12, 0)));
+    spawned.mesh.scaling.setAll(0.08);
     spawned.enablePhysics(this.scene);
     this.balls.push(spawned);
     this.register(spawned);
-    spawned.applyPop(MERGE_POP);
+    spawned.applyPop(MERGE_POP * 1.15);
+    this.grows.push({ ball: spawned, t: 0 });
     if (next === 10 && !this.cleared) this.winFirst();
   }
 
+  private stepMergeFx(dt: number): void {
+    for (let i = this.fades.length - 1; i >= 0; i--) {
+      const f = this.fades[i];
+      f.t += dt;
+      const s = Math.max(0, 1 - f.t / 0.16);
+      f.ball.mesh.scaling.setAll(s);
+      if (f.t >= 0.16) {
+        this.removeBall(f.ball);
+        this.fades.splice(i, 1);
+      }
+    }
+    for (let i = this.grows.length - 1; i >= 0; i--) {
+      const g = this.grows[i];
+      g.t += dt;
+      const x = Math.min(1, g.t / 0.28);
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      const back = 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+      g.ball.mesh.scaling.setAll(back);
+      if (x >= 1) {
+        g.ball.mesh.scaling.setAll(1);
+        this.grows.splice(i, 1);
+      }
+    }
+  }
   private winFirst(): void {
     this.cleared = true;
     this.score += firstT800Bonus(this.elapsed);
