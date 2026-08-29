@@ -5,6 +5,7 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import type { Scene } from "@babylonjs/core/scene";
 import { PhysicsAggregate } from "@babylonjs/core/Physics/v2/physicsAggregate";
 import { PhysicsShapeType } from "@babylonjs/core/Physics/v2/IPhysicsEnginePlugin";
@@ -50,51 +51,6 @@ function boxWall(
   return mesh;
 }
 
-function edgeGlassMat(scene: Scene, name: string, alpha: number, glow: Color3): StandardMaterial {
-  const m = new StandardMaterial(name, scene);
-  m.disableLighting = true;
-  m.diffuseColor = glow;
-  m.specularColor = new Color3(0, 0, 0);
-  m.emissiveColor = glow;
-  m.alpha = alpha;
-  m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  m.needDepthPrePass = true;
-  m.disableDepthWrite = true;
-  m.backFaceCulling = false;
-  return m;
-}
-
-/** Curved glass wall slice — only the left/right of the cylinder, never a filled pane. */
-function glassRibbon(
-  scene: Scene,
-  name: string,
-  radius: number,
-  y0: number,
-  y1: number,
-  a0: number,
-  a1: number,
-  mat: StandardMaterial,
-): Mesh {
-  const segs = 16;
-  const path1: Vector3[] = [];
-  const path2: Vector3[] = [];
-  for (let i = 0; i <= segs; i++) {
-    const a = a0 + (a1 - a0) * (i / segs);
-    const x = Math.cos(a) * radius;
-    const z = Math.sin(a) * radius;
-    path1.push(new Vector3(x, y0, z));
-    path2.push(new Vector3(x, y1, z));
-  }
-  const mesh = MeshBuilder.CreateRibbon(
-    name,
-    { pathArray: [path1, path2], sideOrientation: Mesh.DOUBLESIDE },
-    scene,
-  );
-  mesh.material = mat;
-  mesh.isPickable = false;
-  return mesh;
-}
-
 function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: "lip" | "base"): void {
   ctx.fillStyle = "#4a2a12";
   ctx.fillRect(0, 0, tw, th);
@@ -123,22 +79,15 @@ function paintWood(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: 
     ctx.fill();
   }
   if (kind === "lip") {
+    // V wraps the tube: v=0.5 is the outer equator (camera-facing on the front arc).
     const g = ctx.createLinearGradient(0, 0, 0, th);
-    g.addColorStop(0, "rgba(0,0,0,0.58)");
-    g.addColorStop(0.14, "rgba(255,224,170,0.42)");
-    g.addColorStop(0.36, "rgba(255,255,255,0.14)");
-    g.addColorStop(0.58, "rgba(90,45,14,0.08)");
-    g.addColorStop(0.82, "rgba(20,10,4,0.32)");
-    g.addColorStop(1, "rgba(0,0,0,0.62)");
+    g.addColorStop(0, "rgba(0,0,0,0.55)");
+    g.addColorStop(0.22, "rgba(40,18,6,0.28)");
+    g.addColorStop(0.5, "rgba(255,230,180,0.42)");
+    g.addColorStop(0.72, "rgba(255,210,140,0.16)");
+    g.addColorStop(1, "rgba(0,0,0,0.55)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, tw, th);
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.fillStyle = "#fff";
-    const rr = Math.min(th * 0.48, 52);
-    ctx.beginPath();
-    ctx.roundRect(1, 1, tw - 2, th - 2, rr);
-    ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
   } else {
     const img = ctx.getImageData(0, 0, tw, th);
     const d = img.data;
@@ -167,9 +116,10 @@ function woodMat(scene: Scene, name: string, kind: "lip" | "base"): StandardMate
   const tw = 512;
   const th = kind === "lip" ? 140 : 256;
   const tex = new DynamicTexture(name + "-tex", { width: tw, height: th }, scene, true);
-  tex.hasAlpha = kind === "lip";
+  tex.hasAlpha = false;
   tex.wrapU = Texture.WRAP_ADDRESSMODE;
   tex.wrapV = Texture.WRAP_ADDRESSMODE;
+  if (kind === "lip") tex.uScale = 2;
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
   paintWood(ctx, tw, th, kind);
   tex.update();
@@ -177,19 +127,114 @@ function woodMat(scene: Scene, name: string, kind: "lip" | "base"): StandardMate
   m.diffuseTexture = tex;
   m.emissiveTexture = tex;
   m.diffuseColor = new Color3(1, 1, 1);
-  m.specularColor = new Color3(0.22, 0.16, 0.08);
-  m.specularPower = 36;
-  if (kind === "lip") {
-    m.useAlphaFromDiffuseTexture = true;
-    m.transparencyMode = StandardMaterial.MATERIAL_ALPHATESTANDBLEND;
-    m.alphaCutOff = 0.2;
-    m.disableLighting = true;
-    m.emissiveColor = new Color3(1, 1, 1);
-  } else {
-    m.disableLighting = true;
-    m.emissiveColor = new Color3(1, 1, 1);
-  }
+  m.specularColor = new Color3(0.28, 0.18, 0.08);
+  m.specularPower = 40;
+  m.disableLighting = true;
+  m.emissiveColor = new Color3(1, 1, 1);
   return m;
+}
+
+/** Wrap-around glass: opaque at ±X silhouette, almost clear on ±Z (camera). */
+function paintGlassWrap(ctx: CanvasRenderingContext2D, tw: number, th: number, kind: "outer" | "inner"): void {
+  const img = ctx.createImageData(tw, th);
+  const d = img.data;
+  for (let x = 0; x < tw; x++) {
+    // u=0 at -Z (back, seam hidden), u=0.25 at +X, u=0.5 at +Z, u=0.75 at -X
+    const theta = (x / tw) * Math.PI * 2 - Math.PI / 2;
+    const edge = Math.abs(Math.cos(theta));
+    let a: number;
+    let broad: number;
+    if (kind === "inner") {
+      broad = Math.pow(edge, 3.1);
+      a = 0.02 + 0.42 * broad;
+    } else {
+      broad = Math.pow(edge, 0.92);
+      const caustic = Math.pow(edge, 6) * 0.12;
+      a = 0.08 + 0.40 * broad + caustic;
+    }
+    const r = 172 + 70 * broad;
+    const g = 216 + 32 * broad;
+    const b = 236 + 16 * broad;
+    for (let y = 0; y < th; y++) {
+      const i = (y * tw + x) * 4;
+      d[i] = r;
+      d[i + 1] = g;
+      d[i + 2] = b;
+      d[i + 3] = Math.min(255, a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function glassTubeMat(scene: Scene, name: string, kind: "outer" | "inner"): StandardMaterial {
+  const tw = 512;
+  const th = 64;
+  const tex = new DynamicTexture(name + "-tex", { width: tw, height: th }, scene, true);
+  tex.hasAlpha = true;
+  tex.wrapU = Texture.WRAP_ADDRESSMODE;
+  tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+  const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
+  paintGlassWrap(ctx, tw, th, kind);
+  tex.update();
+  const m = new StandardMaterial(name, scene);
+  m.diffuseTexture = tex;
+  m.emissiveTexture = tex;
+  m.opacityTexture = tex;
+  m.useAlphaFromDiffuseTexture = true;
+  m.diffuseColor = new Color3(1, 1, 1);
+  m.emissiveColor = new Color3(1, 1, 1);
+  m.specularColor = new Color3(0.9, 0.96, 1);
+  m.specularPower = 96;
+  m.disableLighting = true;
+  m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  m.needDepthPrePass = true;
+  m.disableDepthWrite = true;
+  m.backFaceCulling = false;
+  m.separateCullingPass = true;
+  return m;
+}
+
+/** U around circumference (seam at -Z); V along height. Matches paintGlassWrap. */
+function wrapTubeUvs(mesh: Mesh, y0: number, y1: number): void {
+  const pos = mesh.getVerticesData(VertexBuffer.PositionKind);
+  if (!pos) return;
+  const uvs: number[] = [];
+  const h = Math.max(1e-4, y1 - y0);
+  for (let i = 0; i < pos.length; i += 3) {
+    const x = pos[i];
+    const y = pos[i + 1];
+    const z = pos[i + 2];
+    const theta = Math.atan2(z, x);
+    let u = (theta + Math.PI / 2) / (Math.PI * 2);
+    if (u < 0) u += 1;
+    uvs.push(u, (y - y0) / h);
+  }
+  mesh.setVerticesData(VertexBuffer.UVKind, uvs);
+}
+
+function makeTube(
+  scene: Scene,
+  name: string,
+  radius: number,
+  y0: number,
+  y1: number,
+  mat: StandardMaterial,
+): Mesh {
+  const mesh = MeshBuilder.CreateTube(
+    name,
+    {
+      path: [new Vector3(0, y0, 0), new Vector3(0, y1, 0)],
+      radius,
+      tessellation: 64,
+      cap: 0,
+      sideOrientation: Mesh.DOUBLESIDE,
+    },
+    scene,
+  );
+  mesh.material = mat;
+  mesh.isPickable = false;
+  wrapTubeUvs(mesh, y0, y1);
+  return mesh;
 }
 
 export function buildContainer(scene: Scene): ContainerRig {
@@ -199,10 +244,9 @@ export function buildContainer(scene: Scene): ContainerRig {
   const t = TANK.wall;
   const midY = h / 2;
   const outerR = (w + t) / 2;
-  const innerR = outerR - 0.18;
+  const innerR = outerR - 0.2;
   const y0 = 0.08;
   const y1 = h - 0.04;
-  const span = 0.52;
 
   const physGlass = wallMat(scene, "wall-glass", new Color3(0.78, 0.93, 1), 0.62);
   const floorMat = wallMat(scene, "wall-floor", new Color3(0.78, 0.92, 1), 0.5);
@@ -211,9 +255,8 @@ export function buildContainer(scene: Scene): ContainerRig {
 
   const rimWood = woodMat(scene, "jar-wood-rim", "lip");
   const baseWood = woodMat(scene, "jar-wood-base", "base");
-  const outerGlass = edgeGlassMat(scene, "jar-glass-outer", 0.34, new Color3(0.55, 0.78, 0.92));
-  const innerGlass = edgeGlassMat(scene, "jar-glass-inner", 0.22, new Color3(0.42, 0.68, 0.86));
-  const rimLight = edgeGlassMat(scene, "jar-glass-rimlight", 0.42, new Color3(0.82, 0.93, 1));
+  const outerGlass = glassTubeMat(scene, "jar-glass-outer", "outer");
+  const innerGlass = glassTubeMat(scene, "jar-glass-inner", "inner");
 
   const root = MeshBuilder.CreateBox("container-root", { width: 0.01, height: 0.01, depth: 0.01 }, scene);
   root.isVisible = false;
@@ -229,26 +272,19 @@ export function buildContainer(scene: Scene): ContainerRig {
   backW.visibility = 0;
   floor.visibility = 0;
 
-  const rightA0 = -span;
-  const rightA1 = span;
-  const leftA0 = Math.PI - span;
-  const leftA1 = Math.PI + span;
+  const wallOuter = makeTube(scene, "jar-wall-outer", outerR, y0, y1, outerGlass);
+  const wallInner = makeTube(scene, "jar-wall-inner", innerR, y0 + 0.04, y1 - 0.04, innerGlass);
 
-  const wallRO = glassRibbon(scene, "jar-wall-RO", outerR, y0, y1, rightA0, rightA1, outerGlass);
-  const wallRI = glassRibbon(scene, "jar-wall-RI", innerR, y0 + 0.04, y1 - 0.04, rightA0, rightA1, innerGlass);
-  const wallLO = glassRibbon(scene, "jar-wall-LO", outerR, y0, y1, leftA0, leftA1, outerGlass);
-  const wallLI = glassRibbon(scene, "jar-wall-LI", innerR, y0 + 0.04, y1 - 0.04, leftA0, leftA1, innerGlass);
-
-  const hiR = glassRibbon(scene, "jar-hi-R", outerR + 0.03, y0 + 0.15, y1 - 0.15, -0.12, 0.12, rimLight);
-  const hiL = glassRibbon(scene, "jar-hi-L", outerR + 0.03, y0 + 0.15, y1 - 0.15, Math.PI - 0.12, Math.PI + 0.12, rimLight);
-
-  const rimH = 0.78;
-  const rim = MeshBuilder.CreateBox(
+  // Babylon 8 CreateTorus already lies in XZ (hole along +Y) — a bagel on the table.
+  // Do NOT rotation.x = PI/2: that flips the hole toward the camera (the forbidden dark O).
+  const rimThick = 0.68;
+  const rim = MeshBuilder.CreateTorus(
     "jar-rim",
-    { width: w + t * 2.45, height: rimH, depth: d + t * 2.2 },
+    { diameter: outerR * 2, thickness: rimThick, tessellation: 64 },
     scene,
   );
-  rim.position.set(0, h + 0.28, 0);
+  rim.position.set(0, h + 0.08, 0);
+  rim.rotation.y = Math.PI; // UV seam to the back, hole stays along +Y
   rim.material = rimWood;
   rim.isPickable = false;
 
@@ -270,7 +306,16 @@ export function buildContainer(scene: Scene): ContainerRig {
   foot.material = baseWood;
   foot.isPickable = false;
 
-  const visuals = [wallRO, wallRI, wallLO, wallLI, hiR, hiL, rim, base, foot];
+  const baseRing = MeshBuilder.CreateTorus(
+    "jar-base-ring",
+    { diameter: w + t * 2.95, thickness: 0.34, tessellation: 48 },
+    scene,
+  );
+  baseRing.position.set(0, -0.82, 0);
+  baseRing.material = rimWood;
+  baseRing.isPickable = false;
+
+  const visuals = [wallOuter, wallInner, rim, base, foot, baseRing];
   for (const m of [floor, left, right, backW, front, ...visuals]) m.parent = root;
 
   const failLine = MeshBuilder.CreatePlane("fail-line", { width: w - 0.2, height: 0.11 }, scene);
