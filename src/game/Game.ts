@@ -96,11 +96,12 @@ export class Game {
     this.plugin.onCollisionObservable.add((ev) => {
       const a = this.bodyMap.get(ev.collider);
       const b = this.bodyMap.get(ev.collidedAgainst);
+      const imp = ev.impulse ?? 0;
       if (a && b) {
         this.mergeQueue.push([a, b]);
-        this.sfx.collide(ev.impulse ?? 0.2);
-      } else if (a || b) {
-        this.sfx.collide(ev.impulse ?? 0.1);
+        if (imp > 0.45) this.sfx.collide(imp);
+      } else if ((a || b) && imp > 1.1) {
+        this.sfx.collide(imp * 0.4);
       }
     });
 

@@ -32,7 +32,7 @@ function iconTexture(scene: Scene, tier: TierId): DynamicTexture {
   img.crossOrigin = "anonymous";
   img.onload = () => {
     ctx.clearRect(0, 0, size, size);
-    const pad = 28;
+    const pad = 6;
     const box = size - pad * 2;
     ctx.save();
     ctx.beginPath();
@@ -61,18 +61,18 @@ function glassMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const m = new PBRMaterial(`glass-${id}`, scene);
   m.albedoColor = Color3.Lerp(new Color3(0.65, 0.82, 1), tint, 0.85);
   m.metallic = 0;
-  m.roughness = 0.05;
+  m.roughness = 0.03;
   m.indexOfRefraction = 1.52;
-  m.alpha = 0.22;
+  m.alpha = 0.4;
   m.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
   m.subSurface.isRefractionEnabled = true;
-  m.subSurface.refractionIntensity = 0.45;
+  m.subSurface.refractionIntensity = 0.88;
   m.subSurface.indexOfRefraction = 1.52;
   m.subSurface.tintColor = Color3.Lerp(new Color3(0.92, 0.96, 1), tint, 0.7);
   m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 0.9;
+  m.clearCoat.intensity = 1;
   m.clearCoat.roughness = 0.06;
-  m.environmentIntensity = 1.15;
+  m.environmentIntensity = 1.55;
   m.emissiveColor = tint.scale(0.28);
   m.backFaceCulling = false;
   return m;
@@ -126,7 +126,7 @@ export class Ball {
 
     const core = MeshBuilder.CreateSphere(
       `core-${this.id}`,
-      { diameter: def.radius * 2 * 0.62, segments: 24 },
+      { diameter: def.radius * 2 * 0.7, segments: 24 },
       scene,
     );
     core.parent = mesh;
@@ -135,7 +135,7 @@ export class Ball {
     core.isPickable = false;
     this.core = core;
 
-    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.25 }, scene);
+    const face = MeshBuilder.CreatePlane("face-" + String(this.id), { size: def.radius * 1.72 }, scene);
     face.parent = mesh;
     face.position.set(0, 0, 0);
     face.billboardMode = 7;
@@ -157,16 +157,16 @@ export class Ball {
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
-      { diameter: def.radius * 0.42, segments: 10 },
+      { diameter: def.radius * 0.55, segments: 10 },
       scene,
     );
     glint.parent = mesh;
-    glint.position.set(def.radius * 0.42, def.radius * 0.38, def.radius * 0.18);
+    glint.position.set(def.radius * 0.12, def.radius * 0.32, def.radius * 0.72);
     const gm = new StandardMaterial(`glint-mat-${this.id}`, scene);
     gm.disableLighting = true;
     gm.emissiveColor = new Color3(1, 1, 1);
     gm.diffuseColor = new Color3(0, 0, 0);
-    gm.alpha = 0.22;
+    gm.alpha = 0.4;
     gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
     glint.material = gm;
     glint.isPickable = false;

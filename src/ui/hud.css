@@ -1,3 +1,19 @@
+
+#hud .brand {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ff9a28;
+  -webkit-text-stroke: 4px #fff;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 #c45a00, 0 8px 14px rgba(180, 90, 20, 0.28);
+  z-index: 3;
+}
 #hud {
   position: absolute;
   inset: 0;
@@ -14,7 +30,8 @@
   right: 0;
   display: flex;
   justify-content: space-between;
-  height: calc(72 / 844 * 100%);
+  height: calc(56 / 844 * 100%);
+  top: calc(42 / 844 * 100%);
   padding: 8px 12px 0;
   align-items: stretch;
   gap: 8px;
@@ -84,7 +101,7 @@
   width: 32px;
   height: 32px;
   object-fit: cover;
-  border-radius: 50%;
+  border-radius: 18px;
   background: #fff;
   box-shadow: 0 2px 8px rgba(70, 140, 200, 0.25);
 }
@@ -113,7 +130,7 @@
   width: 64px;
   height: 64px;
   min-width: 64px;
-  border-radius: 50%;
+  border-radius: 18px;
   border: 0;
   background: radial-gradient(circle at 35% 30%, #fff6c2, #ffd24a 55%, #f0b429);
   color: #7a4a12;

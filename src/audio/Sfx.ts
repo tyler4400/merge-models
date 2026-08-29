@@ -23,13 +23,14 @@ export class Sfx {
     const ctx = this.dest();
     if (!ctx) return;
     const now = ctx.currentTime;
-    if (now - this.lastCollide < 0.04) return;
-    this.lastCollide = now;
-    const vol = Math.min(0.18, 0.03 + impulse * 0.04);
+    if (now - this.lastCollide < 0.12) return;
+    
+    if (impulse < 0.55) return;
+    const vol = Math.min(0.1, 0.02 + impulse * 0.015);
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = 180 + Math.random() * 80;
+    osc.type = "sine";
+    osc.frequency.value = 520 + Math.random() * 90;
     g.gain.setValueAtTime(vol, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
     osc.connect(g).connect(ctx.destination);
@@ -105,7 +106,7 @@ export class Sfx {
       lfo.frequency.value = 3.2;
       lg.gain.value = 0.035;
       lfo.connect(lg).connect(g.gain);
-      g.gain.setValueAtTime(0.04, ctx.currentTime);
+      g.gain.setValueAtTime(0.012, ctx.currentTime);
       osc.connect(g).connect(ctx.destination);
       osc.start();
       lfo.start();
@@ -131,7 +132,7 @@ export class Sfx {
     notes.forEach((f, i) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
-      osc.type = "triangle";
+      osc.type = "sine";
       osc.frequency.value = f;
       const t = now + i * 0.12;
       g.gain.setValueAtTime(0.0001, t);

@@ -1,62 +1,59 @@
-/** World-space playfield. Screen lock: 390×844, HUD 0–72, jar 80–740, hammer 756–844. */
+/** 390x844 phone. Jar sits inset like Suika, courtyard shows around it. */
 
 export const SCREEN = {
   w: 390,
   h: 844,
-  hudTop: 72,
-  jarTop: 80,
-  jarBottom: 740,
-  jarInnerW: 366,
-  jarInnerH: 660,
-  side: 12,
-  hammerTop: 756,
+  hudTop: 108,
+  jarTop: 132,
+  jarBottom: 668,
+  jarInnerW: 286,
+  jarInnerH: 536,
+  side: 52,
+  hammerTop: 700,
 } as const;
 
-/** Inner play width in world units; height follows 366:660. */
-const INNER_W = 11;
+const INNER_W = 8;
 
 export const TANK = {
   innerWidth: INNER_W,
   innerHeight: INNER_W * (SCREEN.jarInnerH / SCREEN.jarInnerW),
   innerDepth: 4.5,
-  wall: INNER_W * (SCREEN.side / SCREEN.jarInnerW),
+  wall: INNER_W * (18 / SCREEN.jarInnerW),
 } as const;
 
-const VIEW_H = TANK.innerHeight * (SCREEN.h / SCREEN.jarInnerH);
-const Y_MIN = -TANK.innerHeight * ((SCREEN.h - SCREEN.jarBottom) / SCREEN.jarInnerH);
+const WORLD_PER_PX = TANK.innerWidth / SCREEN.jarInnerW;
 
 export const VIEW = {
-  halfW: (TANK.innerWidth + TANK.wall * 2) / 2,
-  halfH: VIEW_H / 2,
-  yMin: Y_MIN,
-  yMax: Y_MIN + VIEW_H,
+  halfW: (SCREEN.w * WORLD_PER_PX) / 2,
+  halfH: (SCREEN.h * WORLD_PER_PX) / 2,
+  yMin: TANK.innerHeight - (SCREEN.h - SCREEN.jarTop) * WORLD_PER_PX,
+  yMax: TANK.innerHeight + SCREEN.jarTop * WORLD_PER_PX,
 } as const;
 
 export const DROP = {
-  y: TANK.innerHeight - 0.55,
-  moveSpeed: 6.2,
-  wallPad: 0.06,
+  y: TANK.innerHeight - 0.42,
+  moveSpeed: 9.4,
+  wallPad: 0.05,
 } as const;
 
-/** Caution line ~48px below jar top → 48/660 of inner height from the rim. */
 export const FAIL_LINE_Y = TANK.innerHeight * (1 - 48 / SCREEN.jarInnerH);
 export const FAIL_HOLD_SEC = 2.0;
 export const WARN_SLACK = 1.2;
 
 export const REST = {
-  linSpeed: 0.22,
-  angSpeed: 0.85,
-  holdSec: 0.22,
+  linSpeed: 0.28,
+  angSpeed: 0.95,
+  holdSec: 0.18,
   maxWaitSec: 5,
 } as const;
 
 export const PHYS = {
-  ballRestitution: 0.34,
-  ballFriction: 0.62,
-  wallRestitution: 0.08,
-  wallFriction: 0.55,
-  linearDamping: 0.08,
-  angularDamping: 0.05,
+  ballRestitution: 0.28,
+  ballFriction: 0.58,
+  wallRestitution: 0.06,
+  wallFriction: 0.6,
+  linearDamping: 0.1,
+  angularDamping: 0.08,
   zSpring: 18,
   zDamp: 8,
 } as const;
@@ -70,7 +67,7 @@ export const TIME_BONUS_MAX = 2000;
 export const TIME_BONUS_PER_SEC = 8;
 export const T800_PAIR_BONUS = 5000;
 
-export const GRAVITY_Y = -9.6;
+export const GRAVITY_Y = -24;
 
 export const CAMERA = {
   targetY: (VIEW.yMin + VIEW.yMax) / 2,

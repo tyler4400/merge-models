@@ -1,4 +1,4 @@
-/** Havok container walls + settle helper. Front wall is invisible so the side view stays open. */
+/** Havok walls plus a visible glass jar (rim + wooden base) like the ChatGPT mock. */
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
@@ -18,9 +18,13 @@ export type ContainerRig = {
 function wallMat(scene: Scene, name: string, color: Color3, alpha = 1): StandardMaterial {
   const m = new StandardMaterial(name, scene);
   m.diffuseColor = color;
-  m.specularColor = new Color3(0.08, 0.06, 0.04);
-  m.emissiveColor = color.scale(0.12);
+  m.specularColor = new Color3(0.95, 0.98, 1);
+  m.specularPower = 64;
+  m.emissiveColor = color.scale(0.22);
   m.alpha = alpha;
+  m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  m.needDepthPrePass = true;
+  m.backFaceCulling = false;
   return m;
 }
 
@@ -51,45 +55,44 @@ export function buildContainer(scene: Scene): ContainerRig {
   const t = TANK.wall;
   const midY = h / 2;
 
-  const glass = wallMat(scene, "wall-glass", new Color3(0.78, 0.9, 1), 0.12);
-  glass.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  glass.specularColor = new Color3(0.85, 0.92, 1);
-  glass.needDepthPrePass = true;
-  const stone = wallMat(scene, "wall-floor", new Color3(0.9, 0.95, 1), 0.18);
-  stone.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  const back = wallMat(scene, "wall-back", new Color3(0.85, 0.93, 1), 0.05);
-  back.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  const ghost = wallMat(scene, "wall-front", new Color3(0.85, 0.92, 0.98), 0.06);
-  ghost.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  ghost.needDepthPrePass = true;
+  const glass = wallMat(scene, "wall-glass", new Color3(0.72, 0.9, 1), 0.42);
+  const floorMat = wallMat(scene, "wall-floor", new Color3(0.78, 0.92, 1), 0.5);
+  const back = wallMat(scene, "wall-back", new Color3(0.8, 0.92, 1), 0.16);
+  const ghost = wallMat(scene, "wall-front", new Color3(0.85, 0.95, 1), 0.08);
+
+  const wood = new StandardMaterial("jar-wood", scene);
+  wood.diffuseColor = new Color3(0.72, 0.48, 0.22);
+  wood.emissiveColor = new Color3(0.28, 0.16, 0.06);
+  wood.specularColor = new Color3(0.35, 0.22, 0.1);
 
   const root = MeshBuilder.CreateBox("container-root", { width: 0.01, height: 0.01, depth: 0.01 }, scene);
   root.isVisible = false;
 
-  const floor = boxWall(
-    scene,
-    "floor",
-    new Vector3(w + t * 2, t, d + t * 2),
-    new Vector3(0, -t / 2, 0),
-    stone,
-  );
+  const floor = boxWall(scene, "floor", new Vector3(w + t * 2, t, d + t * 2), new Vector3(0, -t / 2, 0), floorMat);
   const left = boxWall(scene, "wall-L", new Vector3(t, h + t, d + t * 2), new Vector3(-w / 2 - t / 2, midY, 0), glass);
   const right = boxWall(scene, "wall-R", new Vector3(t, h + t, d + t * 2), new Vector3(w / 2 + t / 2, midY, 0), glass);
   const backW = boxWall(scene, "wall-B", new Vector3(w, h + t, t), new Vector3(0, midY, -d / 2 - t / 2), back);
   const front = boxWall(scene, "wall-F", new Vector3(w, h + t, t), new Vector3(0, midY, d / 2 + t / 2), ghost);
-  front.visibility = 0.04;
-  left.visibility = 0.5;
-  right.visibility = 0.5;
-  backW.visibility = 0.08;
-  floor.visibility = 0.4;
+  front.visibility = 0.12;
+  left.visibility = 1;
+  right.visibility = 1;
+  backW.visibility = 0.35;
+  floor.visibility = 1;
 
-  for (const m of [floor, left, right, backW, front]) m.parent = root;
+  const rim = MeshBuilder.CreateTorus("jar-rim", { diameter: w + t, thickness: t * 1.35, tessellation: 48 }, scene);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.set(0, h + t * 0.15, 0);
+  rim.material = wood;
+  rim.isPickable = false;
 
-  const failLine = MeshBuilder.CreateBox(
-    "fail-line",
-    { width: w - 0.08, height: 0.04, depth: d + 0.2 },
-    scene,
-  );
+  const base = MeshBuilder.CreateCylinder("jar-base", { diameter: w + t * 3.2, height: t * 1.6, tessellation: 32 }, scene);
+  base.position.set(0, -t * 1.1, 0);
+  base.material = wood;
+  base.isPickable = false;
+
+  for (const m of [floor, left, right, backW, front, rim, base]) m.parent = root;
+
+  const failLine = MeshBuilder.CreateBox("fail-line", { width: w - 0.08, height: 0.045, depth: d + 0.2 }, scene);
   failLine.position.set(0, 0, 0);
   failLine.isPickable = false;
   failLine.parent = root;
@@ -123,5 +126,4 @@ export function keepInLane(body: PhysicsBody, z?: number): void {
 }
 
 export const isBodySettled = bodySettled;
-
 export const createTank = buildContainer;

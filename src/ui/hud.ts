@@ -37,6 +37,7 @@ export class Hud {
   constructor(root: HTMLElement, handlers: HudHandlers) {
     this.root = root;
     root.innerHTML = `
+      <div class="brand">合成大模型</div>
       <div class="bar">
         <div class="score-block">
           <div class="label">分数</div>
@@ -127,7 +128,7 @@ export class Hud {
   }
 
   setHammers(left: number, aiming: boolean): void {
-    this.hammerCount.textContent = String(left);
+    this.hammerCount.textContent = "x" + String(left);
     this.hammerBtn.dataset.empty = left <= 0 ? "1" : "0";
     this.hammerBtn.classList.toggle("active", aiming && left > 0);
     this.hammerBtn.disabled = left <= 0;
