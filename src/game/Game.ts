@@ -1,47 +1,82 @@
-/**
- * Phase 1 play loop: hold a 1–4 ball, slide it, ghost-preview, drop into Havok.
- * Later phases add merge / score / hammer / win-lose on top of this.
- */
+/** Phase machine: title / playing / won / dead / hammerAim. */
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
+import type { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
+import { HavokPlugin as HavokPluginCtor } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import "@babylonjs/core/Culling/ray";
+import { Sfx } from "../audio/Sfx";
+import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
-import { DROP, REST } from "./constants";
+import { DROP, MERGE_POP, REST } from "./constants";
+import { FailLine } from "./failLine";
+import { HammerStock, ShatterFx, canSmash } from "./hammer";
+import { planMerge } from "./merge";
 import { bodySettled, clampDropX, keepInLane } from "./physics";
+import { firstT800Bonus, mergePoints, t800PairBonus } from "./scoring";
 import { createSpawnQueue, type SpawnQueue } from "./spawn";
 import { getTier, type TierId } from "./tiers";
+
+export type Phase = "title" | "playing" | "won" | "dead" | "hammerAim";
 
 const DROP_PLANE = Plane.FromPositionAndNormal(Vector3.Zero(), new Vector3(0, 0, 1));
 
 export class Game {
-  readonly balls: Ball[] = [];
-  private readonly queue: SpawnQueue = createSpawnQueue();
-  private held: Ball | null = null;
-  private ghost: Ball | null = null;
+  readonly scene: Scene;
+  readonly canvas: HTMLCanvasElement;
+  readonly plugin: HavokPlugin;
+  readonly hud: Hud;
+  readonly sfx: Sfx;
+  readonly fail: FailLine;
+  readonly hammers = new HammerStock();
+  readonly shatter: ShatterFx;
+  queue: SpawnQueue = createSpawnQueue();
+
+  phase: Phase = "title";
+  score = 0;
+  elapsed = 0;
+  timing = false;
+  cleared = false;
+  combo = 0;
+  balls: Ball[] = [];
+  held: Ball | null = null;
+  ghost: Ball | null = null;
+  dropX = 0;
+  keyLeft = false;
+  keyRight = false;
+  smashLock = 0;
+  pending: Ball | null = null;
+  pendingAge = 0;
+  pendingSettledFor = 0;
+  private idMap = new Map<number, Ball>();
+  private bodyMap = new Map<object, Ball>();
+  private mergeQueue: Array<readonly [Ball, Ball]> = [];
+  private freeze = false;
   private guide: LinesMesh | null = null;
-  private dropX = 0;
-  private keyLeft = false;
-  private keyRight = false;
-  /** Last dropped ball that must settle before the next drop. */
-  private pending: Ball | null = null;
-  private pendingAge = 0;
-  private pendingSettledFor = 0;
-  private nextIcon: HTMLImageElement | null = null;
-  private nextName: HTMLElement | null = null;
-  private waitHint: HTMLElement | null = null;
+  private inputBound = false;
 
-  constructor(
-    private readonly scene: Scene,
-    private readonly canvas: HTMLCanvasElement,
-    private readonly hud: HTMLElement,
-  ) {}
+  constructor(scene: Scene, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
+    this.scene = scene;
+    this.canvas = canvas;
+    const plugin = scene.getPhysicsEngine()?.getPhysicsPlugin();
+    if (!(plugin instanceof HavokPluginCtor)) throw new Error("Havok plugin missing");
+    this.plugin = plugin;
+    this.sfx = new Sfx();
+    const line = scene.getMeshByName("fail-line");
+    this.fail = new FailLine(scene, line as Mesh);
+    this.shatter = new ShatterFx(scene);
+    this.hud = new Hud(hudRoot, {
+      onStart: () => this.start(),
+      onContinue: () => this.continueScore(),
+      onRestart: () => this.restart(),
+      onHammer: () => this.toggleHammer(),
+    });
 
-  start(): void {
-    this.mountHud();
     this.guide = MeshBuilder.CreateDashedLines(
       "drop-guide",
       {
@@ -50,95 +85,181 @@ export class Game {
         gapSize: 0.1,
         dashNb: 48,
       },
-      this.scene,
+      scene,
     );
     this.guide.color = new Color3(0.95, 0.78, 0.42);
-    this.guide.alpha = 0.38;
+    this.guide.alpha = 0.2;
     this.guide.isPickable = false;
-    this.spawnHeld();
+
+    this.plugin.onCollisionObservable.add((ev) => {
+      const a = this.bodyMap.get(ev.collider);
+      const b = this.bodyMap.get(ev.collidedAgainst);
+      if (a && b) {
+        this.mergeQueue.push([a, b]);
+        this.sfx.collide(ev.impulse ?? 0.2);
+      } else if (a || b) {
+        this.sfx.collide(ev.impulse ?? 0.1);
+      }
+    });
+
+    this.hud.setNext(this.queue.peek() as TierId);
+    this.hud.setHammers(this.hammers.left, false);
     this.bindInput();
+
+    if (typeof location !== "undefined" && location.search.includes("shot=play")) {
+      window.setTimeout(() => this.autoshot(), 350);
+    }
   }
 
-  /** Drive off the engine delta — never assume a fixed frame rate. */
+  start(): void {
+    this.sfx.unlock();
+    this.resetRun(true);
+    this.phase = "playing";
+    this.hud.hideTitle();
+    this.hud.hideResult();
+    this.spawnHeld();
+  }
+
+  restart(): void {
+    this.start();
+  }
+
+  continueScore(): void {
+    this.sfx.unlock();
+    this.phase = "playing";
+    this.freeze = false;
+    this.hud.hideResult();
+    if (!this.held) this.spawnHeld();
+  }
+
   tick(dtMs: number): void {
     const dt = Math.min(dtMs / 1000, 0.05);
+    this.shatter.tick(dt);
+    if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
+    if (this.phase === "title" || this.freeze) return;
+
+    if (this.timing && (this.phase === "playing" || this.phase === "hammerAim")) {
+      this.elapsed += dt;
+      this.hud.setTime(this.elapsed);
+    }
+
     const axis = (this.keyRight ? 1 : 0) - (this.keyLeft ? 1 : 0);
     if (axis !== 0) this.dropX += axis * DROP.moveSpeed * dt;
+
     this.stepPending(dt);
     this.syncHeld();
+
     for (const ball of this.balls) {
-      if (ball.held || !ball.body) continue;
+      if (ball.held || ball.merging || !ball.body) continue;
       keepInLane(ball.body);
+      if (bodySettled(ball.body)) {
+        ball.settleClock += dt;
+        ball.unrestClock = 0;
+      } else {
+        ball.settleClock = 0;
+        ball.unrestClock += dt;
+      }
+    }
+
+    this.flushMerges();
+
+    if (this.phase === "playing" || this.phase === "hammerAim") {
+      const { warn, failed } = this.fail.tick(dt, this.balls);
+      this.sfx.setAlarm(warn);
+      if (failed) this.lose();
     }
   }
 
-  private mountHud(): void {
-    this.hud.innerHTML = `
-      <div class="hud-top">
-        <div class="hud-title">合成大模型</div>
-        <div class="hud-next">
-          <div class="hud-next-label">NEXT</div>
-          <img class="hud-next-icon" id="hud-next-icon" alt="" />
-          <div class="hud-next-name" id="hud-next-name"></div>
-        </div>
-      </div>
-      <div class="hud-hint">A / D 或方向键或鼠标移动 · 点击或空格投放</div>
-      <div class="hud-wait" id="hud-wait" hidden>球还在滚动…</div>
-    `;
-    this.nextIcon = this.hud.querySelector("#hud-next-icon");
-    this.nextName = this.hud.querySelector("#hud-next-name");
-    this.waitHint = this.hud.querySelector("#hud-wait");
-    this.refreshHud();
-  }
-
-  private refreshHud(): void {
-    const next = getTier(this.queue.peek());
-    if (this.nextIcon) {
-      this.nextIcon.src = next.iconUrl;
-      this.nextIcon.alt = next.name;
+  toggleHammer(): void {
+    this.sfx.unlock();
+    if (this.phase === "hammerAim") {
+      this.phase = "playing";
+      this.hud.setHammers(this.hammers.left, false);
+      return;
     }
-    if (this.nextName) this.nextName.textContent = next.name;
-    this.syncWaitHint();
+    if (this.phase !== "playing") return;
+    if (!this.hammers.canUse()) return;
+    this.phase = "hammerAim";
+    this.hud.setHammers(this.hammers.left, true);
   }
 
-  private syncWaitHint(): void {
-    if (this.waitHint) this.waitHint.hidden = this.canDrop();
+  private resetRun(full: boolean): void {
+    for (const b of [...this.balls]) this.removeBall(b);
+    this.held?.dispose();
+    this.ghost?.dispose();
+    this.held = null;
+    this.ghost = null;
+    this.balls = [];
+    this.idMap.clear();
+    this.bodyMap.clear();
+    this.mergeQueue = [];
+    this.combo = 0;
+    this.smashLock = 0;
+    this.pending = null;
+    this.pendingAge = 0;
+    this.pendingSettledFor = 0;
+    this.freeze = false;
+    this.timing = false;
+    this.elapsed = 0;
+    if (full) {
+      this.score = 0;
+      this.cleared = false;
+      this.hammers.reset();
+      this.queue = createSpawnQueue();
+    }
+    this.hud.setScore(this.score);
+    this.hud.setTime(0);
+    this.hud.setNext(this.queue.peek() as TierId);
+    this.hud.setHammers(this.hammers.left, false);
+    this.sfx.setAlarm(false);
+  }
+
+  private register(ball: Ball): void {
+    this.idMap.set(ball.id, ball);
+    if (ball.body) this.bodyMap.set(ball.body, ball);
+  }
+
+  private removeBall(ball: Ball): void {
+    if (ball.body) this.bodyMap.delete(ball.body);
+    this.idMap.delete(ball.id);
+    this.balls = this.balls.filter((b) => b.id !== ball.id);
+    if (this.held?.id === ball.id) this.held = null;
+    ball.dispose();
   }
 
   private canDrop(): boolean {
-    return this.pending === null && this.held !== null;
+    if (this.phase !== "playing" || !this.held || this.smashLock > 0) return false;
+    return this.pending === null;
   }
 
   private spawnHeld(): void {
     this.ghost?.dispose();
     this.ghost = null;
+    if (this.held) return;
     const tier = this.queue.take() as TierId;
     const pos = new Vector3(this.dropX, DROP.y, 0);
     const held = new Ball(this.scene, tier, pos);
     held.held = true;
     this.held = held;
+    this.register(held);
 
     const ghost = new Ball(this.scene, tier, pos);
     ghost.held = true;
-    ghost.mesh.visibility = 0.18;
+    ghost.mesh.visibility = 0.2;
     ghost.face.visibility = 0;
     this.ghost = ghost;
     this.syncHeld();
-    this.refreshHud();
+    this.hud.setNext(this.queue.peek() as TierId);
   }
 
   private syncHeld(): void {
     const radius = this.held?.radius ?? getTier(1).radius;
     this.dropX = clampDropX(this.dropX, radius);
-    if (this.held) {
-      this.held.mesh.position.set(this.dropX, DROP.y, 0);
-    }
-    if (this.ghost) {
-      this.ghost.mesh.position.set(this.dropX, DROP.y - 0.04, 0.02);
-    }
+    if (this.held) this.held.mesh.position.set(this.dropX, DROP.y, 0);
+    if (this.ghost) this.ghost.mesh.position.set(this.dropX, DROP.y - 0.04, 0.02);
     if (this.guide) {
       this.guide.position.x = this.dropX;
-      this.guide.alpha = this.canDrop() ? 0.38 : 0.14;
+      this.guide.alpha = this.canDrop() ? 0.38 : 0.12;
     }
   }
 
@@ -153,7 +274,6 @@ export class Game {
         this.pending = null;
         this.pendingAge = 0;
         this.pendingSettledFor = 0;
-        this.syncWaitHint();
       }
     } else {
       this.pendingSettledFor = 0;
@@ -164,14 +284,32 @@ export class Game {
     if (!this.canDrop() || !this.held) return;
     const ball = this.held;
     ball.held = false;
+    ball.mesh.visibility = 1;
     ball.enablePhysics(this.scene);
+    if (ball.body) this.bodyMap.set(ball.body, ball);
     this.balls.push(ball);
     this.held = null;
+    this.ghost?.dispose();
+    this.ghost = null;
     this.pending = ball;
     this.pendingAge = 0;
     this.pendingSettledFor = 0;
-    this.syncWaitHint();
+    this.combo = 0;
+    if (!this.timing) this.timing = true;
     this.spawnHeld();
+  }
+
+  private smash(ball: Ball): void {
+    if (!canSmash(ball)) return;
+    if (!this.hammers.consume()) return;
+    const at = ball.mesh.getAbsolutePosition().clone();
+    this.shatter.burst(at, ball.radius);
+    this.sfx.shatter();
+    if (this.pending?.id === ball.id) this.pending = null;
+    this.removeBall(ball);
+    this.phase = "playing";
+    this.smashLock = 0.4;
+    this.hud.setHammers(this.hammers.left, false);
   }
 
   private pointerToX(): void {
@@ -183,16 +321,39 @@ export class Game {
     this.dropX = ray.origin.add(ray.direction.scale(dist)).x;
   }
 
+  private pickBall(): Ball | null {
+    const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (m: AbstractMesh) => {
+      return typeof m.metadata?.ballId === "number";
+    });
+    const id = pick?.pickedMesh?.metadata?.ballId as number | undefined;
+    return id != null ? this.idMap.get(id) ?? null : null;
+  }
+
   private bindInput(): void {
-    this.canvas.addEventListener("pointermove", () => this.pointerToX());
+    if (this.inputBound) return;
+    this.inputBound = true;
+    this.canvas.addEventListener("pointermove", () => {
+      if (this.phase === "title" || this.phase === "won" || this.phase === "dead") return;
+      this.pointerToX();
+    });
     this.canvas.addEventListener("pointerup", (e) => {
+      this.sfx.unlock();
       if (e.pointerType !== "touch" && e.button !== 0) return;
       this.pointerToX();
-      this.tryDrop();
+      if (this.phase === "hammerAim") {
+        const ball = this.pickBall();
+        if (ball) this.smash(ball);
+        else {
+          this.phase = "playing";
+          this.hud.setHammers(this.hammers.left, false);
+        }
+        return;
+      }
+      if (this.phase === "playing") this.tryDrop();
     });
     this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-
     window.addEventListener("keydown", (e) => {
+      this.sfx.unlock();
       if (e.code === "ArrowLeft" || e.code === "KeyA") {
         this.keyLeft = true;
         e.preventDefault();
@@ -201,12 +362,93 @@ export class Game {
         e.preventDefault();
       } else if (e.code === "Space") {
         e.preventDefault();
-        if (!e.repeat) this.tryDrop();
+        if (!e.repeat && this.phase === "playing") this.tryDrop();
       }
     });
     window.addEventListener("keyup", (e) => {
       if (e.code === "ArrowLeft" || e.code === "KeyA") this.keyLeft = false;
       if (e.code === "ArrowRight" || e.code === "KeyD") this.keyRight = false;
     });
+  }
+
+  private flushMerges(): void {
+    const seen = new Set<number>();
+    const pairs = this.mergeQueue;
+    this.mergeQueue = [];
+    for (const [a, b] of pairs) {
+      if (seen.has(a.id) || seen.has(b.id)) continue;
+      if (!planMerge(a, b)) continue;
+      seen.add(a.id);
+      seen.add(b.id);
+      this.applyMerge(a, b);
+    }
+  }
+
+  private applyMerge(a: Ball, b: Ball): void {
+    const plan = planMerge(a, b);
+    if (!plan) return;
+    a.merging = true;
+    b.merging = true;
+    const mid = plan.mid.clone();
+    if (this.pending?.id === a.id || this.pending?.id === b.id) this.pending = null;
+    this.removeBall(a);
+    this.removeBall(b);
+
+    if (plan.kind === "t800-pair") {
+      this.score += t800PairBonus();
+      this.hud.setScore(this.score);
+      this.hud.toast("T-800 对撞 +5000");
+      this.sfx.merge(10);
+      this.shatter.burst(mid, 1.7);
+      return;
+    }
+
+    const next = plan.next;
+    if (!next) return;
+    this.score += mergePoints(next, this.combo);
+    this.combo += 1;
+    this.hud.setScore(this.score);
+    this.hud.toast(getTier(next).name);
+    this.sfx.merge(next);
+
+    const spawned = new Ball(this.scene, next, mid.add(new Vector3(0, 0.1, 0)));
+    spawned.enablePhysics(this.scene);
+    this.balls.push(spawned);
+    this.register(spawned);
+    spawned.applyPop(MERGE_POP);
+    if (next === 10 && !this.cleared) this.winFirst();
+  }
+
+  private winFirst(): void {
+    this.cleared = true;
+    this.score += firstT800Bonus(this.elapsed);
+    this.hud.setScore(this.score);
+    this.sfx.win();
+    this.phase = "won";
+    window.setTimeout(() => {
+      if (this.phase === "won") this.hud.showWin(this.score, this.elapsed, this.hammers.left);
+    }, 1100);
+  }
+
+  private lose(): void {
+    this.phase = "dead";
+    this.freeze = true;
+    this.sfx.setAlarm(false);
+    this.hud.showLose(this.score, this.elapsed, this.hammers.left);
+  }
+
+  /** Headless confirmation shot: start and drop a few balls. */
+  autoshot(): void {
+    this.start();
+    const xs = [-2.4, -0.6, 1.2, 2.8, -1.5];
+    let i = 0;
+    const step = () => {
+      if (i >= xs.length) return;
+      this.dropX = xs[i];
+      this.tryDrop();
+      i += 1;
+      window.setTimeout(step, 850);
+    };
+    window.setTimeout(step, 500);
   }
 }

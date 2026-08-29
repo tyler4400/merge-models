@@ -60,11 +60,9 @@ export async function createApp(
   fill.diffuse = new Color3(1, 0.82, 0.62);
 
   const rig = buildContainer(scene);
-  // Phase 1: container only — hide the later-phase caution line mesh.
-  rig.failLine.isVisible = false;
+  rig.failLine.isVisible = true;
 
   const game = new Game(scene, canvas, hud);
-  game.start();
   scene.onBeforeRenderObservable.add(() => {
     game.tick(engine.getDeltaTime());
   });
