@@ -63,7 +63,7 @@ function glassMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   m.metallic = 0;
   m.roughness = 0.05;
   m.indexOfRefraction = 1.52;
-  m.alpha = 0.55;
+  m.alpha = 0.22;
   m.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
   m.subSurface.isRefractionEnabled = true;
   m.subSurface.refractionIntensity = 0.45;
@@ -167,7 +167,7 @@ export class Ball {
     gm.disableLighting = true;
     gm.emissiveColor = new Color3(1, 1, 1);
     gm.diffuseColor = new Color3(0, 0, 0);
-    gm.alpha = 0.55;
+    gm.alpha = 0.22;
     gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
     glint.material = gm;
     glint.isPickable = false;
