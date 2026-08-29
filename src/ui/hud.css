@@ -6,13 +6,41 @@
   right: 0;
   text-align: center;
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.08em;
-  color: #ff9a28;
-  -webkit-text-stroke: 4px #fff;
+  color: #ffc43a;
+  -webkit-text-stroke: 6px #fff;
   paint-order: stroke fill;
-  text-shadow: 0 3px 0 #c45a00, 0 8px 14px rgba(180, 90, 20, 0.28);
+  text-shadow:
+    0 1px 0 #fff,
+    0 2px 0 #fff,
+    0 3px 0 #ffe08a,
+    0 4px 0 #f0a020,
+    0 5px 0 #d47810,
+    0 6px 0 #b85e08,
+    0 8px 0 #8a4200,
+    0 11px 16px rgba(160, 70, 10, 0.38);
   z-index: 3;
+}
+#hud .brand::before,
+#hud .brand::after {
+  content: "";
+  display: inline-block;
+  width: 11px;
+  height: 8px;
+  margin: 0 3px;
+  background: #5cb84a;
+  border-radius: 0 80% 0 80%;
+  box-shadow: 1px 1px 0 #fff, 0 2px 3px rgba(40, 90, 20, 0.25);
+  transform: rotate(-48deg);
+  vertical-align: middle;
+  position: relative;
+  top: -7px;
+}
+#hud .brand::after {
+  background: #6fc85a;
+  transform: rotate(48deg) scaleX(-1);
+  top: -6px;
 }
 #hud {
   position: absolute;
@@ -44,6 +72,7 @@
   border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 6px 16px rgba(70, 140, 200, 0.18);
   backdrop-filter: blur(10px);
+  position: relative;
 }
 
 #hud .score-block {
@@ -81,6 +110,59 @@
   color: #1e4b7a;
 }
 
+#hud .mark {
+  position: absolute;
+  pointer-events: none;
+  display: block;
+}
+#hud .mark-coin {
+  top: -5px;
+  left: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, #fff4c2, #f0c430 52%, #c88810);
+  box-shadow: 0 1px 3px rgba(140, 90, 10, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+#hud .mark-coin::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(190, 130, 20, 0.55);
+}
+#hud .mark-clock {
+  right: -4px;
+  bottom: -4px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #e8ffd4, #7bc44a 60%, #3e8a22);
+  box-shadow: 0 1px 3px rgba(40, 90, 20, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+#hud .mark-clock::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 1.5px;
+  height: 5px;
+  background: #245818;
+  border-radius: 1px;
+}
+#hud .mark-clock::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: 4px;
+  height: 1.5px;
+  background: #245818;
+  border-radius: 1px;
+}
+
 #hud .right {
   flex: 1;
   min-width: 0;
@@ -112,6 +194,28 @@
   max-width: 72px;
 }
 
+#hud .fail-mark {
+  position: absolute;
+  left: calc(52 / 390 * 100%);
+  width: calc(286 / 390 * 100%);
+  top: calc(180 / 844 * 100%);
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+#hud .fail-mark span {
+  position: absolute;
+  left: 50%;
+  top: -13px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #ff3a30;
+  text-shadow: 0 1px 0 #fff, 0 0 6px rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+
 #hud .dock {
   position: absolute;
   left: 0;
@@ -127,17 +231,41 @@
 
 #hud .hammer {
   pointer-events: auto;
+  position: relative;
   width: 64px;
   height: 64px;
   min-width: 64px;
   border-radius: 18px;
   border: 0;
-  background: radial-gradient(circle at 35% 30%, #fff6c2, #ffd24a 55%, #f0b429);
+  padding: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0) 38%),
+    radial-gradient(circle at 35% 30%, #fff6c2, #ffd24a 55%, #e8a820);
   color: #7a4a12;
-  font-size: 18px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(240, 170, 40, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -5px 10px rgba(180, 100, 0, 0.22),
+    0 8px 18px rgba(240, 170, 40, 0.45);
+}
+#hud .hammer .mallet {
+  width: 44px;
+  height: 44px;
+  display: block;
+  margin: 2px auto 0;
+  filter: drop-shadow(0 2px 2px rgba(120, 70, 10, 0.28));
+}
+#hud .hammer .ham-count {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(120, 60, 0, 0.75);
+  letter-spacing: 0.02em;
 }
 
 #hud .hammer[data-empty="1"] {
@@ -146,7 +274,9 @@
 }
 
 #hud .hammer.active {
-  background: radial-gradient(circle at 35% 30%, #ffe0b0, #ff9a3d);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 38%),
+    radial-gradient(circle at 35% 30%, #ffe0b0, #ff9a3d);
   transform: scale(0.96);
 }
 

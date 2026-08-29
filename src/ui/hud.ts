@@ -40,12 +40,14 @@ export class Hud {
       <div class="brand">合成大模型</div>
       <div class="bar">
         <div class="score-block">
+          <span class="mark mark-coin" aria-hidden="true"></span>
           <div class="label">分数</div>
           <div class="score" data-score>0</div>
         </div>
         <div class="time-block">
           <div class="label">时间</div>
           <div class="time" data-time>0:00</div>
+          <span class="mark mark-clock" aria-hidden="true"></span>
         </div>
         <div class="right">
           <div class="next">
@@ -57,10 +59,33 @@ export class Hud {
           </div>
         </div>
       </div>
+      <div class="fail-mark" aria-hidden="true"><span>⚠️ 警告</span></div>
       <div class="toast" data-toast></div>
       <div class="aim-hint" data-aim>点一颗已静止的球 · 点空处取消</div>
       <div class="dock">
-        <button class="hammer" data-hammer type="button">🔨 <span data-hammer-count>3</span></button>
+        <button class="hammer" data-hammer type="button">
+          <svg class="mallet" viewBox="0 0 64 64" aria-hidden="true">
+            <defs>
+              <linearGradient id="mallet-head" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f7ead0"/>
+                <stop offset="0.4" stop-color="#e4c894"/>
+                <stop offset="1" stop-color="#c9a56a"/>
+              </linearGradient>
+              <linearGradient id="mallet-handle" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#7a4a1c"/>
+                <stop offset="0.45" stop-color="#c48a48"/>
+                <stop offset="1" stop-color="#6a3c14"/>
+              </linearGradient>
+            </defs>
+            <g transform="rotate(-38 32 34)">
+              <rect x="29" y="20" width="7" height="36" rx="3.2" fill="url(#mallet-handle)"/>
+              <rect x="13" y="8" width="38" height="18" rx="5" fill="url(#mallet-head)"/>
+              <rect x="16" y="11" width="32" height="5" rx="2.4" fill="#fff6e4" opacity="0.55"/>
+              <rect x="15" y="22" width="34" height="2.2" rx="1" fill="#a07840" opacity="0.35"/>
+            </g>
+          </svg>
+          <span class="ham-count" data-hammer-count>x3</span>
+        </button>
       </div>
       <div class="overlay show" data-title>
         <div class="card">
