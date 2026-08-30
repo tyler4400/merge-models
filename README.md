@@ -2,6 +2,11 @@
 
 侧视容器里往下掉玻璃球，两颗同级合成下一级。第一次做出 **T-800** 即通关，之后可以继续刷分。休闲局，不是刷分肝游。
 
+<p align="center">
+  <img src="docs/shots/play.jpg" alt="对局：院子罐子里的合成圆片" width="280">
+  <img src="docs/shots/title.jpg" alt="标题页" width="280">
+</p>
+
 完整玩法见 [docs/BRIEF.md](docs/BRIEF.md)。图标出处见 [docs/ASSET_SOURCES.md](docs/ASSET_SOURCES.md)。
 
 ## 这是什么仓库
@@ -56,7 +61,7 @@ Havok wasm 放在 `public/HavokPhysics.wasm`，运行时用 locateFile 加载 `/
 3. 两颗同级碰到变成下一级，中央 toast 显示名字。
 4. 第一次做出 T-800 即通关结算。可选「继续刷分」或「再来一局」。
 5. 球在顶线之上且静止约 2 秒即失败。
-6. 点锤子，再点一颗已静止的球砸碎（全局限 3 次）。点空处取消。
+6. 点锤子，再点一颗已落地的球砸碎（全局限 3 次）。点空处取消。
 
 桌面：A / D 或方向键或鼠标移动；点击 / 空格投放。
 手机：手指拖动手持球，松手投放。画布禁止滚动和缩放。
@@ -77,9 +82,9 @@ src/
     spawn.ts              下一颗队列，仅 1-4 级，权重 35/30/20/15
     physics.ts            Havok 隐形盒墙；罐子是关卡贴图
     merge.ts              同级接触 → 下一级上弹；两颗 T-800 消失
-    hammer.ts             3 锤子：瞄准 → 点静止球 → 碎裂 VFX
+    hammer.ts             3 锤子：瞄准 → 点已落地的球 → 碎裂 VFX
     failLine.ts           靠近变红 + 警报；静止越线约 2s 失败
-    Ball.ts               不透明玻璃弹珠 + 球面贴纸 + 高光
+    TokenLayer.ts         2D 圆片层：图标铺满 + 分阶色圈，叠在院子图上
   ui/                     HTML/CSS 覆盖层：分数、计时、下一颗、锤子、toast、胜负
   audio/Sfx.ts            Web Audio 程序音：碰撞、合成、碎裂、警报、胜利
   assets/icons/           01-doubao.png … 10-t800.png
@@ -113,14 +118,16 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 - index.html：viewport-fit=cover，禁止用户缩放。
 - canvas：touch-action none，overscroll-behavior none。
-- HUD 按 390px 宽排：分数在左、时间居中、下一颗和锤子在右。
+- HUD 按 390px 宽排：顶栏分数 / 时间 / 下一颗，底栏一只锤子 ×3。
 - 锤子按钮足够大，方便拇指。
 - 覆盖层用大号按钮和对比度足够的字。
 
 ## 视觉
 
-夜间休闲，不是街机霓虹。深色容器、暖色玻璃、警戒线一条琥珀 / 红。标题「合成大模型」。风格确认图：screenshots/ui-play.png、screenshots/ui-title.png（gitignore，本机生成）。
+日光院子，不是夜间霓虹。白 / 米色圆角条、气泡立体字、软阴影。罐子是淡 U 玻璃缸（木底座、没有盖）。球是 2D 圆片：图标铺满，外圈分阶色。标题「合成大模型」。
+
+截图：`docs/shots/play.jpg`、`docs/shots/title.jpg`。
 
 ## 现状
 
-罐子是 `01-courtyard.png` 画上的玻璃缸（只有木底座、没有盖），物理墙隐形。球是不透明玻璃弹珠，图标贴在曲面上随球滚。合成音是短玻璃叮。
+院子和罐子是 `01-courtyard.png` 的 HTML 图，物理墙隐形。圆片画在 2D overlay 上，滚动时图标跟着转。碰撞音是玻璃珠互撞，停稳的堆不再连响。
