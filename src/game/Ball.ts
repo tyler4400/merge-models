@@ -1,11 +1,10 @@
-/** Lit PBR glass marble + rolling ±Z logo caps + tiny spec glint. */
+/** Tinted glass shell + opaque inner core; agent icon sealed in the core, not on the outer surface. */
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
-import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { PhysicsAggregate } from "@babylonjs/core/Physics/v2/physicsAggregate";
@@ -17,6 +16,8 @@ import { TIERS, getTier, type TierId } from "./tiers";
 let nextId = 1;
 const iconCache = new Map<number, DynamicTexture>();
 const iconImages = new Map<number, HTMLImageElement>();
+
+const CORE_RATIO = 0.62;
 
 /** Punch near-black that touches transparent (clip edge), so K/ChatGPT glyphs sit on the marble. */
 function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void {
@@ -106,6 +107,8 @@ function iconTexture(scene: Scene, tier: TierId): DynamicTexture {
   tex.hasAlpha = true;
   tex.wrapU = Texture.CLAMP_ADDRESSMODE;
   tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+  tex.vScale = -1;
+  tex.vOffset = 1;
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
   ctx.clearRect(0, 0, size, size);
   tex.update();
@@ -137,28 +140,57 @@ export function preloadBallIcons(scene: Scene): Promise<void> {
   return Promise.all(jobs).then(() => undefined);
 }
 
-function shellMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
-  const def = getTier(tier);
-  const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
-  const m = new PBRMaterial(`shell-${id}`, scene);
-  m.albedoColor = tint;
-  m.metallic = 0;
-  m.roughness = 0.22;
-  m.environmentIntensity = 0.4;
-  m.directIntensity = 1.2;
-  m.specularIntensity = 0.42;
-  m.emissiveColor = new Color3(def.tint[0] * 0.4, def.tint[1] * 0.4, def.tint[2] * 0.4);
-  m.emissiveIntensity = 0.5;
-  m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 0.4;
-  m.clearCoat.roughness = 0.2;
-  m.unlit = false;
-  m.disableLighting = false;
-  m.backFaceCulling = true;
+function tintOf(tier: TierId): Color3 {
+  const t = getTier(tier).tint;
+  return new Color3(t[0], t[1], t[2]);
+}
+
+/** Opaque colored nucleus — always reads as a volume even if the glass layer fails. */
+function coreMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
+  const tint = tintOf(tier);
+  const m = new StandardMaterial(`core-${id}`, scene);
+  m.diffuseColor = tint;
+  m.emissiveColor = tint.scale(0.55);
+  m.specularColor = new Color3(0.38, 0.38, 0.38);
+  m.specularPower = 40;
   m.alpha = 1;
-  m.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
-  m.subSurface.isRefractionEnabled = false;
-  m.subSurface.isTranslucencyEnabled = false;
+  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
+  m.backFaceCulling = true;
+  m.disableLighting = false;
+  return m;
+}
+
+/**
+ * Tinted glass. StandardMaterial + opacity Fresnel (not PBR refraction) so the rim
+ * stays visible on mobile WebGL. Center is more see-through so the inner icon reads.
+ */
+function glassMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
+  const tint = tintOf(tier);
+  const m = new StandardMaterial(`glass-${id}`, scene);
+  m.diffuseColor = tint;
+  m.emissiveColor = tint.scale(0.22);
+  m.specularColor = new Color3(1, 1, 1);
+  m.specularPower = 96;
+  m.alpha = 0.34;
+  m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  m.needDepthPrePass = true;
+  m.backFaceCulling = false;
+  m.separateCullingPass = true;
+  m.disableLighting = false;
+  const op = new FresnelParameters();
+  op.isEnabled = true;
+  op.power = 1.9;
+  op.bias = 0.16;
+  op.leftColor = new Color3(1, 1, 1);
+  op.rightColor = new Color3(0.08, 0.08, 0.08);
+  m.opacityFresnelParameters = op;
+  const em = new FresnelParameters();
+  em.isEnabled = true;
+  em.power = 1.5;
+  em.bias = 0.12;
+  em.leftColor = new Color3(0.85, 0.92, 1);
+  em.rightColor = tint.scale(0.18);
+  m.emissiveFresnelParameters = em;
   return m;
 }
 
@@ -167,48 +199,49 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const tex = iconTexture(scene, tier);
   dm.diffuseTexture = tex;
   dm.emissiveTexture = tex;
-  dm.emissiveColor = new Color3(0.92, 0.92, 0.92);
+  dm.emissiveColor = new Color3(1, 1, 1);
+  dm.zOffset = -4;
   dm.diffuseColor = new Color3(1, 1, 1);
   dm.specularColor = new Color3(0, 0, 0);
   dm.disableLighting = true;
   dm.backFaceCulling = true;
   dm.useAlphaFromDiffuseTexture = true;
-  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHATEST;
-  dm.alphaCutOff = 0.46;
-  dm.zOffset = -20;
+  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+  dm.needDepthPrePass = true;
   return dm;
 }
 
-/** Disc projected onto a sphere so the icon follows curvature. Camera-plane ±Z only. */
-function stickerCap(
+function backingMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
+  const tint = tintOf(tier);
+  const m = new StandardMaterial("back-mat-" + String(id), scene);
+  m.diffuseColor = Color3.Lerp(tint, new Color3(1, 1, 1), 0.55);
+  m.emissiveColor = Color3.Lerp(tint, new Color3(1, 1, 1), 0.35).scale(0.85);
+  m.specularColor = new Color3(0.2, 0.2, 0.2);
+  m.specularPower = 32;
+  m.alpha = 1;
+  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
+  m.backFaceCulling = true;
+  return m;
+}
+
+/** Flat disc on the inner core (±Z). Rolls with the ball; not projected onto the outer glass. */
+function coreCap(
   scene: Scene,
   name: string,
-  radius: number,
-  rotY: number,
+  coreR: number,
+  zSign: number,
   mat: StandardMaterial,
+  group: number,
+  radiusScale: number,
+  zScale: number,
 ): Mesh {
-  const rOn = radius * 1.04;
-  const capR = radius * 0.72;
-  const disc = MeshBuilder.CreateDisc(name, { radius: capR, tessellation: 48, updatable: true }, scene);
-  const pos = disc.getVerticesData(VertexBuffer.PositionKind);
-  if (pos) {
-    for (let i = 0; i < pos.length; i += 3) {
-      const x = pos[i];
-      const y = pos[i + 1];
-      const z = Math.sqrt(Math.max(1e-6, rOn * rOn - x * x - y * y));
-      const len = Math.hypot(x, y, z) || 1;
-      pos[i] = (x / len) * rOn;
-      pos[i + 1] = (y / len) * rOn;
-      pos[i + 2] = (z / len) * rOn;
-    }
-    disc.updateVerticesData(VertexBuffer.PositionKind, pos);
-    disc.createNormals(true);
-  }
+  const disc = MeshBuilder.CreateDisc(name, { radius: coreR * radiusScale, tessellation: 48 }, scene);
   disc.material = mat;
   disc.isPickable = false;
   disc.billboardMode = 0;
-  disc.rotation.y = rotY;
-  disc.renderingGroupId = 0;
+  disc.position.z = zSign * coreR * zScale;
+  disc.rotation.y = zSign < 0 ? Math.PI : 0;
+  disc.renderingGroupId = group;
   return disc;
 }
 
@@ -218,7 +251,7 @@ function glintMat(scene: Scene, id: number): StandardMaterial {
   gm.emissiveColor = new Color3(1, 1, 1);
   gm.diffuseColor = new Color3(1, 1, 1);
   gm.specularColor = new Color3(0, 0, 0);
-  gm.alpha = 0.72;
+  gm.alpha = 0.78;
   gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   gm.disableDepthWrite = true;
   return gm;
@@ -229,8 +262,10 @@ export class Ball {
   readonly tier: TierId;
   readonly radius: number;
   readonly mass: number;
+  /** Outer glass shell — Havok sphere is attached here. */
   readonly mesh: Mesh;
-  /** Front (+Z) sticker. */
+  readonly core: Mesh;
+  /** Front (+Z) inner logo. */
   readonly face: Mesh;
   readonly glint: Mesh;
   aggregate: PhysicsAggregate | null = null;
@@ -247,42 +282,56 @@ export class Ball {
     this.tier = tier;
     this.radius = def.radius;
     this.mass = def.mass;
+    const r = def.radius;
+    const coreR = r * CORE_RATIO;
 
     const mesh = MeshBuilder.CreateSphere(
       `ball-${this.id}`,
-      { diameter: def.radius * 2, segments: 32 },
+      { diameter: r * 2, segments: 32 },
       scene,
     );
     mesh.position.copyFrom(pos);
-    mesh.material = shellMat(scene, tier, this.id);
+    mesh.material = glassMat(scene, tier, this.id);
     mesh.isPickable = true;
     mesh.metadata = { ballId: this.id };
     mesh.visibility = 1;
-    mesh.renderingGroupId = 0;
+    mesh.renderingGroupId = 1;
     this.mesh = mesh;
 
+    const core = MeshBuilder.CreateSphere(
+      `core-${this.id}`,
+      { diameter: coreR * 2, segments: 24 },
+      scene,
+    );
+    core.parent = mesh;
+    core.material = coreMat(scene, tier, this.id);
+    core.isPickable = false;
+    core.renderingGroupId = 0;
+    this.core = core;
+
+    const bm = backingMat(scene, tier, this.id);
+    coreCap(scene, "back-" + String(this.id), coreR, 1, bm, 0, 0.9, 1.02).parent = mesh;
+    coreCap(scene, "back-zb-" + String(this.id), coreR, -1, bm, 0, 0.9, 1.02).parent = mesh;
     const dm = logoMat(scene, tier, this.id);
-    const r = def.radius;
-    // Camera sits at +Z; ±Z caps only — never stamp -Y (white belly).
-    const face = stickerCap(scene, "face-" + String(this.id), r, 0, dm);
+    const face = coreCap(scene, "face-" + String(this.id), coreR, 1, dm, 2, 0.88, 1.08);
     face.parent = mesh;
-    stickerCap(scene, "face-zb-" + String(this.id), r, Math.PI, dm).parent = mesh;
+    coreCap(scene, "face-zb-" + String(this.id), coreR, -1, dm, 2, 0.88, 1.08).parent = mesh;
     this.face = face;
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
-      { diameter: def.radius * 0.11, segments: 8 },
+      { diameter: r * 0.12, segments: 8 },
       scene,
     );
     glint.parent = mesh;
-    glint.position.set(def.radius * -0.22, def.radius * 0.38, def.radius * 0.82);
+    glint.position.set(r * -0.22, r * 0.38, r * 0.78);
     glint.material = glintMat(scene, this.id);
     glint.isPickable = false;
-    glint.renderingGroupId = 0;
+    glint.renderingGroupId = 1;
     this.glint = glint;
   }
 
-  enablePhysics(scene: Scene): void {
+  enablePhysics(scene: Scene, spin = 1): void {
     if (this.aggregate) return;
     const agg = new PhysicsAggregate(
       this.mesh,
@@ -299,7 +348,7 @@ export class Ball {
     this.aggregate = agg;
     this.held = false;
     this.dropAge = 0;
-    this.nudgeSpin();
+    this.nudgeSpin(spin);
   }
 
   /** Random tumble so collisions read as glass orbs, not coins. */
@@ -335,6 +384,7 @@ export class Ball {
 
   setLogoVisible(v: number): void {
     this.face.visibility = v;
+    this.core.visibility = v;
     for (const c of this.mesh.getChildMeshes()) {
       if (c.name.startsWith("face")) c.visibility = v;
     }
@@ -345,6 +395,7 @@ export class Ball {
     this.aggregate?.dispose();
     this.aggregate = null;
     this.face.dispose();
+    this.core.dispose();
     this.glint.dispose();
     this.mesh.dispose();
   }

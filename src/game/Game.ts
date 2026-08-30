@@ -490,7 +490,7 @@ export class Game {
     ];
     for (const [x, y, tier] of spots) {
       const ball = new Ball(this.scene, tier, new Vector3(x, y, 0));
-      ball.enablePhysics(this.scene);
+      ball.enablePhysics(this.scene, 0);
       this.balls.push(ball);
       this.register(ball);
     }
@@ -506,7 +506,7 @@ export class Game {
     for (const [x, tier] of spots) {
       const ball = new Ball(this.scene, tier, new Vector3(x, DROP.y, 0));
       ball.mesh.visibility = 1;
-      ball.enablePhysics(this.scene);
+      ball.enablePhysics(this.scene, 0);
       this.balls.push(ball);
       this.register(ball);
     }
