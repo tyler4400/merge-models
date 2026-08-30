@@ -35,6 +35,7 @@ export class Hud {
   private aimHint: HTMLElement;
   private hammerBtn: HTMLButtonElement;
   private hammerCount: HTMLElement;
+  private failMark: HTMLElement;
 
   constructor(root: HTMLElement, handlers: HudHandlers) {
     this.root = root;
@@ -109,12 +110,12 @@ export class Hud {
     this.hammerBtn = root.querySelector("[data-hammer]")!;
     this.hammerCount = root.querySelector("[data-hammer-count]")!;
 
-    const failEl = root.querySelector(".fail-mark") as HTMLElement;
+    this.failMark = root.querySelector(".fail-mark") as HTMLElement;
     const worldPerPx = TANK.innerWidth / SCREEN.jarInnerW;
     const failTopPx = SCREEN.jarTop + (TANK.innerHeight - FAIL_LINE_Y) / worldPerPx;
-    failEl.style.top = `${(failTopPx / SCREEN.h) * 100}%`;
-    failEl.style.left = `${(SCREEN.side / SCREEN.w) * 100}%`;
-    failEl.style.width = `${(SCREEN.jarInnerW / SCREEN.w) * 100}%`;
+    this.failMark.style.top = `${(failTopPx / SCREEN.h) * 100}%`;
+    this.failMark.style.left = `${(SCREEN.side / SCREEN.w) * 100}%`;
+    this.failMark.style.width = `${(SCREEN.jarInnerW / SCREEN.w) * 100}%`;
 
     const brandImg = root.querySelector("[data-brand-img]") as HTMLImageElement;
     brandImg.src = titleUrl;
@@ -130,6 +131,10 @@ export class Hud {
     root.querySelector("[data-restart]")!.addEventListener("click", () => handlers.onRestart());
   }
 
+
+  setWarn(on: boolean): void {
+    this.failMark.classList.toggle("show", on);
+  }
   setScore(n: number): void {
     this.scoreEl.textContent = String(n);
   }

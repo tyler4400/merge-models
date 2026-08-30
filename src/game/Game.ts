@@ -178,6 +178,7 @@ export class Game {
 
     if (this.phase === "playing" || this.phase === "hammerAim") {
       const { warn, failed } = this.fail.tick(dt, this.balls);
+      this.hud.setWarn(warn);
       this.sfx.setAlarm(warn);
       if (failed) this.lose();
     }
@@ -200,6 +201,7 @@ export class Game {
     for (const b of [...this.balls]) this.removeBall(b);
     this.held?.dispose();
     this.held = null;
+    this.hud.setWarn(false);
     this.balls = [];
     this.idMap.clear();
     this.bodyMap.clear();
