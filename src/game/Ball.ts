@@ -1,7 +1,7 @@
-/** Whisper-tinted glass shell; a distinct 3D core sits in the geometric center with the icon on it. */
-import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
+/** Flat 2D token disc + agent icon. Havok sphere is invisible; collision/spin unchanged. */
+import { Color3, Quaternion, Vector3 } from "@babylonjs/core/Maths/math";
+import { Axis } from "@babylonjs/core/Maths/math.axis";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
@@ -14,13 +14,18 @@ import { tuneBallBody } from "./physics";
 import { TIERS, getTier, type TierId } from "./tiers";
 
 let nextId = 1;
-const iconCache = new Map<number, DynamicTexture>();
+const tokenCache = new Map<string, DynamicTexture>();
 const iconImages = new Map<number, HTMLImageElement>();
 
-/** Inner figurine ~ half the marble, so glass thickness reads around it. */
-const CORE_RATIO = 0.5;
+/** 1–2 matte (A), 3–4 jelly (B). Higher tiers stay matte until a style is picked. */
+function tokenStyle(tier: TierId): "matte" | "jelly" {
+  return tier === 3 || tier === 4 ? "jelly" : "matte";
+}
 
-/** Punch near-black that touches transparent (clip edge), so K/ChatGPT glyphs sit on the marble. */
+function isPhoto(tier: TierId): boolean {
+  return tier === 1 || tier === 10;
+}
+
 function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void {
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
@@ -66,27 +71,68 @@ function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void
   ctx.putImageData(img, 0, 0);
 }
 
-function paintIcon(ctx: CanvasRenderingContext2D, img: HTMLImageElement, size: number): void {
+function rgb(t: [number, number, number]): string {
+  const h = (x: number) => Math.round(Math.max(0, Math.min(1, x)) * 255);
+  return `rgb(${h(t[0])},${h(t[1])},${h(t[2])})`;
+}
+
+function paintToken(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  size: number,
+  tint: [number, number, number],
+  style: "matte" | "jelly",
+  photo: boolean,
+): void {
   ctx.clearRect(0, 0, size, size);
-  const pad = 8;
-  const box = size - pad * 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const R = size / 2 - 2;
+
   ctx.save();
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, box / 2, 0, Math.PI * 2);
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
   ctx.closePath();
   ctx.clip();
+
+  if (style === "jelly") {
+    const g = ctx.createRadialGradient(cx - R * 0.18, cy - R * 0.22, R * 0.08, cx, cy, R);
+    g.addColorStop(0, rgb([Math.min(1, tint[0] + 0.28), Math.min(1, tint[1] + 0.22), Math.min(1, tint[2] + 0.18)]));
+    g.addColorStop(0.55, rgb(tint));
+    g.addColorStop(1, rgb([tint[0] * 0.72, tint[1] * 0.72, tint[2] * 0.72]));
+    ctx.fillStyle = g;
+  } else {
+    ctx.fillStyle = rgb(tint);
+  }
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.beginPath();
+  ctx.ellipse(cx - R * 0.18, cy - R * 0.32, R * 0.42, R * 0.22, -0.35, 0, Math.PI * 2);
+  ctx.fillStyle = style === "jelly" ? "rgba(255,255,255,0.38)" : "rgba(255,255,255,0.16)";
+  ctx.fill();
+
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
-  if (iw < 1 || ih < 1) {
-    ctx.restore();
-    return;
+  if (iw >= 1 && ih >= 1) {
+    const src = Math.min(iw, ih);
+    const sx = (iw - src) / 2;
+    const sy = (ih - src) / 2;
+    if (photo) {
+      const box = R * 2 * 0.9;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, box / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, sx, sy, src, src, cx - box / 2, cy - box / 2, box, box);
+      ctx.restore();
+    } else {
+      const box = R * 2 * 0.62;
+      ctx.drawImage(img, sx, sy, src, src, cx - box / 2, cy - box / 2, box, box);
+      knockOutDarkBackdrop(ctx, size);
+    }
   }
-  const src = Math.min(iw, ih);
-  const sx = (iw - src) / 2;
-  const sy = (ih - src) / 2;
-  ctx.drawImage(img, sx, sy, src, src, pad, pad, box, box);
   ctx.restore();
-  knockOutDarkBackdrop(ctx, size);
 }
 
 function ensureImage(tier: TierId, url: string): HTMLImageElement {
@@ -99,37 +145,36 @@ function ensureImage(tier: TierId, url: string): HTMLImageElement {
   return img;
 }
 
-function iconTexture(scene: Scene, tier: TierId): DynamicTexture {
-  const hit = iconCache.get(tier);
+function tokenTexture(scene: Scene, tier: TierId): DynamicTexture {
+  const style = tokenStyle(tier);
+  const key = `${tier}-${style}`;
+  const hit = tokenCache.get(key);
   if (hit) return hit;
   const def = getTier(tier);
   const size = 512;
-  const tex = new DynamicTexture(`icon-${tier}`, { width: size, height: size }, scene, true);
+  const tex = new DynamicTexture(`token-${key}`, { width: size, height: size }, scene, true);
   tex.hasAlpha = true;
   tex.wrapU = Texture.CLAMP_ADDRESSMODE;
   tex.wrapV = Texture.CLAMP_ADDRESSMODE;
-  tex.vScale = -1;
-  tex.vOffset = 1;
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
   ctx.clearRect(0, 0, size, size);
   tex.update();
 
   const img = ensureImage(tier, def.iconUrl);
   const draw = (): void => {
-    paintIcon(ctx, img, size);
+    paintToken(ctx, img, size, def.tint, style, isPhoto(tier));
     tex.update();
   };
   if (img.complete && img.naturalWidth > 0) draw();
   else img.addEventListener("load", draw, { once: true });
 
-  iconCache.set(tier, tex);
+  tokenCache.set(key, tex);
   return tex;
 }
 
-/** Decode every logo before the first ball is spawned so autoshot / first drop is not empty. */
 export function preloadBallIcons(scene: Scene): Promise<void> {
   const jobs = TIERS.map((def) => {
-    iconTexture(scene, def.id);
+    tokenTexture(scene, def.id);
     const img = iconImages.get(def.id);
     if (!img) return Promise.resolve();
     if (img.complete && img.naturalWidth > 0) return Promise.resolve();
@@ -141,182 +186,20 @@ export function preloadBallIcons(scene: Scene): Promise<void> {
   return Promise.all(jobs).then(() => undefined);
 }
 
-function tintOf(tier: TierId): Color3 {
-  const t = getTier(tier).tint;
-  return new Color3(t[0], t[1], t[2]);
-}
-
-/** Saturated figurine — identity even with the logo ignored. */
-function coreMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
-  const tint = tintOf(tier);
-  const m = new StandardMaterial(`core-${id}`, scene);
-  m.diffuseColor = tint;
-  m.emissiveColor = tint.scale(0.42);
-  m.specularColor = new Color3(0.55, 0.5, 0.4);
-  m.specularPower = 48;
-  m.alpha = 1;
-  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
-  m.backFaceCulling = true;
-  m.disableLighting = false;
-  return m;
-}
-
-/**
- * Whisper-tinted crystal. StandardMaterial + opacity Fresnel (not PBR refraction)
- * so the rim stays visible on mobile while the center stays see-through.
- */
-function glassMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
-  const tint = tintOf(tier);
-  const pale = Color3.Lerp(tint, new Color3(1, 1, 1), 0.78);
-  const m = new StandardMaterial(`glass-${id}`, scene);
-  m.diffuseColor = pale;
-  m.emissiveColor = tint.scale(0.08);
-  m.specularColor = new Color3(1, 1, 1);
-  m.specularPower = 128;
-  m.alpha = 0.16;
+function discMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
+  const tex = tokenTexture(scene, tier);
+  const m = new StandardMaterial(`token-mat-${id}`, scene);
+  m.diffuseTexture = tex;
+  m.emissiveTexture = tex;
+  m.emissiveColor = new Color3(1, 1, 1);
+  m.diffuseColor = new Color3(1, 1, 1);
+  m.specularColor = new Color3(0, 0, 0);
+  m.disableLighting = true;
+  m.backFaceCulling = false;
+  m.useAlphaFromDiffuseTexture = true;
   m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   m.needDepthPrePass = true;
-  m.backFaceCulling = false;
-  m.separateCullingPass = true;
-  m.disableLighting = false;
-  const op = new FresnelParameters();
-  op.isEnabled = true;
-  op.power = 2.4;
-  op.bias = 0.08;
-  op.leftColor = new Color3(1, 1, 1);
-  op.rightColor = new Color3(0.04, 0.04, 0.04);
-  m.opacityFresnelParameters = op;
-  const em = new FresnelParameters();
-  em.isEnabled = true;
-  em.power = 1.8;
-  em.bias = 0.1;
-  em.leftColor = new Color3(0.92, 0.96, 1);
-  em.rightColor = tint.scale(0.06);
-  m.emissiveFresnelParameters = em;
   return m;
-}
-
-function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
-  const dm = new StandardMaterial("face-mat-" + String(id), scene);
-  const tex = iconTexture(scene, tier);
-  dm.diffuseTexture = tex;
-  dm.emissiveTexture = tex;
-  dm.emissiveColor = new Color3(1, 1, 1);
-  dm.zOffset = -2;
-  dm.diffuseColor = new Color3(1, 1, 1);
-  dm.specularColor = new Color3(0, 0, 0);
-  dm.disableLighting = true;
-  dm.backFaceCulling = true;
-  dm.useAlphaFromDiffuseTexture = true;
-  dm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  dm.needDepthPrePass = true;
-  return dm;
-}
-
-function backingMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
-  const tint = tintOf(tier);
-  const m = new StandardMaterial("back-mat-" + String(id), scene);
-  m.diffuseColor = Color3.Lerp(tint, new Color3(1, 1, 1), 0.28);
-  m.emissiveColor = tint.scale(0.35);
-  m.specularColor = new Color3(0.2, 0.2, 0.2);
-  m.specularPower = 32;
-  m.alpha = 1;
-  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
-  m.backFaceCulling = true;
-  return m;
-}
-
-function glintMat(scene: Scene, id: number): StandardMaterial {
-  const gm = new StandardMaterial(`glint-mat-${id}`, scene);
-  gm.disableLighting = true;
-  gm.emissiveColor = new Color3(1, 1, 1);
-  gm.diffuseColor = new Color3(1, 1, 1);
-  gm.specularColor = new Color3(0, 0, 0);
-  gm.alpha = 0.7;
-  gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
-  gm.disableDepthWrite = true;
-  return gm;
-}
-
-/** Unique inner silhouette per tier, fitted inside a sphere of radius coreR. */
-function innerCore(scene: Scene, id: number, tier: TierId, coreR: number): { mesh: Mesh; faceZ: number } {
-  const name = `core-${id}`;
-  let mesh: Mesh;
-  switch (tier) {
-    case 1:
-      mesh = MeshBuilder.CreateSphere(name, { diameter: 2, segments: 24 }, scene);
-      break;
-    case 2:
-      mesh = MeshBuilder.CreateBox(name, { width: 2.35, height: 0.92, depth: 1.35 }, scene);
-      break;
-    case 3: {
-      mesh = MeshBuilder.CreateCylinder(
-        name,
-        { height: 1.2, diameter: 2, tessellation: 6 },
-        scene,
-      );
-      mesh.rotation.x = Math.PI / 2;
-      break;
-    }
-    case 4:
-      mesh = MeshBuilder.CreateCapsule(name, { height: 2.2, radius: 0.6, tessellation: 12 }, scene);
-      break;
-    case 5:
-      mesh = MeshBuilder.CreateIcoSphere(name, { radius: 1, subdivisions: 1 }, scene);
-      break;
-    case 6:
-      mesh = MeshBuilder.CreatePolyhedron(name, { type: 1, size: 1 }, scene);
-      break;
-    case 7:
-      mesh = MeshBuilder.CreateTorus(
-        name,
-        { diameter: 1.6, thickness: 0.52, tessellation: 28 },
-        scene,
-      );
-      mesh.rotation.x = Math.PI / 2;
-      break;
-    case 8:
-      mesh = MeshBuilder.CreateCylinder(
-        name,
-        { height: 1.75, diameter: 1.5, tessellation: 24 },
-        scene,
-      );
-      break;
-    case 9:
-      mesh = MeshBuilder.CreateCylinder(
-        name,
-        { height: 2.05, diameterTop: 0.08, diameterBottom: 1.9, tessellation: 24 },
-        scene,
-      );
-      break;
-    default:
-      mesh = MeshBuilder.CreateBox(name, { width: 1.5, height: 1.7, depth: 1.35 }, scene);
-      break;
-  }
-  mesh.computeWorldMatrix(true);
-  const br = mesh.getBoundingInfo().boundingSphere.radius;
-  if (br > 1e-6) mesh.scaling.scaleInPlace(coreR / br);
-  mesh.computeWorldMatrix(true);
-  const faceZ = Math.abs(mesh.getBoundingInfo().boundingBox.extendSize.z) * Math.abs(mesh.scaling.z);
-  return { mesh, faceZ: Math.max(faceZ, coreR * 0.32) };
-}
-
-function coreCap(
-  scene: Scene,
-  name: string,
-  radius: number,
-  z: number,
-  zSign: number,
-  mat: StandardMaterial,
-): Mesh {
-  const disc = MeshBuilder.CreateDisc(name, { radius, tessellation: 48 }, scene);
-  disc.material = mat;
-  disc.isPickable = false;
-  disc.billboardMode = 0;
-  disc.position.z = zSign * z;
-  disc.rotation.y = zSign < 0 ? Math.PI : 0;
-  disc.renderingGroupId = 0;
-  return disc;
 }
 
 export class Ball {
@@ -324,10 +207,11 @@ export class Ball {
   readonly tier: TierId;
   readonly radius: number;
   readonly mass: number;
-  /** Outer glass shell — Havok sphere is attached here. */
+  /** Invisible Havok sphere. Game still drives this node. */
   readonly mesh: Mesh;
+  /** Facing-camera 2D token. Aliased as face/core/glint for old callers. */
+  readonly disc: Mesh;
   readonly core: Mesh;
-  /** Front (+Z) inner logo, on the figurine, behind the glass. */
   readonly face: Mesh;
   readonly glint: Mesh;
   aggregate: PhysicsAggregate | null = null;
@@ -337,6 +221,8 @@ export class Ball {
   failClock = 0;
   unrestClock = 0;
   dropAge = 0;
+  /** In-plane spin shown on the disc; physics angular velocity is unchanged. */
+  private spin = 0;
 
   constructor(scene: Scene, tier: TierId, pos: Vector3) {
     const def = getTier(tier);
@@ -345,50 +231,49 @@ export class Ball {
     this.radius = def.radius;
     this.mass = def.mass;
     const r = def.radius;
-    const coreR = r * CORE_RATIO;
 
     const mesh = MeshBuilder.CreateSphere(
       `ball-${this.id}`,
-      { diameter: r * 2, segments: 32 },
+      { diameter: r * 2, segments: 16 },
       scene,
     );
     mesh.position.copyFrom(pos);
-    mesh.material = glassMat(scene, tier, this.id);
     mesh.isPickable = true;
     mesh.metadata = { ballId: this.id };
-    mesh.visibility = 1;
-    mesh.renderingGroupId = 1;
+    mesh.visibility = 0;
+    mesh.isVisible = true;
+    mesh.renderingGroupId = 0;
     this.mesh = mesh;
 
-    const inner = innerCore(scene, this.id, tier, coreR);
-    inner.mesh.parent = mesh;
-    inner.mesh.material = coreMat(scene, tier, this.id);
-    inner.mesh.isPickable = false;
-    inner.mesh.renderingGroupId = 0;
-    this.core = inner.mesh;
-
-    const bm = backingMat(scene, tier, this.id);
-    const dm = logoMat(scene, tier, this.id);
-    const logoR = coreR * 0.72;
-    const faceZ = inner.faceZ * 1.04;
-    coreCap(scene, "back-" + String(this.id), logoR, faceZ, 1, bm).parent = mesh;
-    coreCap(scene, "back-zb-" + String(this.id), logoR, faceZ, -1, bm).parent = mesh;
-    const face = coreCap(scene, "face-" + String(this.id), logoR, faceZ, 1, dm);
-    face.parent = mesh;
-    coreCap(scene, "face-zb-" + String(this.id), logoR, faceZ, -1, dm).parent = mesh;
-    this.face = face;
-
-    const glint = MeshBuilder.CreateSphere(
-      `glint-${this.id}`,
-      { diameter: r * 0.11, segments: 8 },
+    const disc = MeshBuilder.CreateDisc(
+      `token-${this.id}`,
+      { radius: r, tessellation: 48 },
       scene,
     );
-    glint.parent = mesh;
-    glint.position.set(r * -0.22, r * 0.38, r * 0.82);
-    glint.material = glintMat(scene, this.id);
-    glint.isPickable = false;
-    glint.renderingGroupId = 1;
-    this.glint = glint;
+    disc.parent = mesh;
+    disc.material = discMat(scene, tier, this.id);
+    disc.isPickable = false;
+    disc.renderingGroupId = 1;
+    disc.visibility = 1;
+    this.disc = disc;
+    this.face = disc;
+    this.core = disc;
+    this.glint = disc;
+  }
+
+  /** Keep the token facing the camera; roll the icon with the sphere's Z spin. */
+  syncVisual(dt: number): void {
+    const body = this.aggregate?.body;
+    if (body) {
+      this.spin += body.getAngularVelocity().z * dt;
+    }
+    const q = this.mesh.rotationQuaternion;
+    const zSpin = Quaternion.RotationAxis(Axis.Z, this.spin);
+    if (q) {
+      this.disc.rotationQuaternion = q.clone().invert().multiply(zSpin);
+    } else {
+      this.disc.rotation.set(-this.mesh.rotation.x, -this.mesh.rotation.y, this.spin);
+    }
   }
 
   enablePhysics(scene: Scene, spin = 1): void {
@@ -411,7 +296,6 @@ export class Ball {
     this.nudgeSpin(spin);
   }
 
-  /** Random tumble so collisions read as glass orbs, not coins. */
   nudgeSpin(scale = 1): void {
     const body = this.aggregate?.body;
     if (!body) return;
@@ -443,20 +327,14 @@ export class Ball {
   }
 
   setLogoVisible(v: number): void {
-    this.face.visibility = v;
-    this.core.visibility = v;
-    for (const c of this.mesh.getChildMeshes()) {
-      if (c.name.startsWith("face") || c.name.startsWith("back")) c.visibility = v;
-    }
+    this.disc.visibility = v;
   }
 
   dispose(): void {
     this.merging = true;
     this.aggregate?.dispose();
     this.aggregate = null;
-    this.face.dispose();
-    this.core.dispose();
-    this.glint.dispose();
+    this.disc.dispose();
     this.mesh.dispose();
   }
 }

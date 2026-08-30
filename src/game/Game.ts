@@ -162,6 +162,7 @@ export class Game {
     this.syncHeld();
 
     for (const ball of this.balls) {
+      ball.syncVisual(dt);
       if (ball.held || ball.merging || !ball.body) continue;
       ball.dropAge += dt;
       keepInLane(ball.body);
@@ -507,7 +508,6 @@ export class Game {
     ];
     for (const [x, tier] of spots) {
       const ball = new Ball(this.scene, tier, new Vector3(x, DROP.y, 0));
-      ball.mesh.visibility = 1;
       ball.enablePhysics(this.scene, 0);
       this.balls.push(ball);
       this.register(ball);
