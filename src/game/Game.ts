@@ -4,7 +4,6 @@ import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
-import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
@@ -13,6 +12,7 @@ import "@babylonjs/core/Culling/ray";
 import { Sfx } from "../audio/Sfx";
 import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
+import { TokenLayer } from "./TokenLayer";
 import { DROP, MERGE_POP, REST } from "./constants";
 import { FailLine } from "./failLine";
 import { HammerStock, ShatterFx, canSmash } from "./hammer";
@@ -35,6 +35,7 @@ export class Game {
   readonly fail: FailLine;
   readonly hammers = new HammerStock();
   readonly shatter: ShatterFx;
+  readonly tokens: TokenLayer;
   queue: SpawnQueue = createSpawnQueue();
 
   phase: Phase = "title";
@@ -72,6 +73,7 @@ export class Game {
     const line = scene.getMeshByName("fail-line");
     this.fail = new FailLine(scene, line as Mesh);
     this.shatter = new ShatterFx(scene);
+    this.tokens = new TokenLayer(canvas);
     this.hud = new Hud(hudRoot, {
       onStart: () => this.start(),
       onContinue: () => this.continueScore(),
@@ -148,7 +150,7 @@ export class Game {
     this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
     if (this.dropLock > 0) this.dropLock = Math.max(0, this.dropLock - dt);
-    if (this.phase === "title" || this.freeze) return;
+    if (this.phase === "title" || this.freeze) { this.paintTokens(); return; }
 
     if (this.timing && (this.phase === "playing" || this.phase === "hammerAim")) {
       this.elapsed += dt;
@@ -174,6 +176,7 @@ export class Game {
         ball.unrestClock += dt;
       }
     }
+    this.paintTokens();
 
     this.flushMerges();
 
@@ -329,12 +332,13 @@ export class Game {
     this.dropX = ray.origin.add(ray.direction.scale(dist)).x;
   }
 
+  private paintTokens(): void {
+    const list = this.held ? this.balls.concat(this.held) : this.balls.slice();
+    this.tokens.draw(list);
+  }
+
   private pickBall(): Ball | null {
-    const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (m: AbstractMesh) => {
-      return typeof m.metadata?.ballId === "number";
-    });
-    const id = pick?.pickedMesh?.metadata?.ballId as number | undefined;
-    return id != null ? this.idMap.get(id) ?? null : null;
+    return this.tokens.hitTest(this.scene.pointerX, this.scene.pointerY, this.balls);
   }
 
   private bindInput(): void {
