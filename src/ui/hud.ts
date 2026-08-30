@@ -47,18 +47,16 @@ export class Hud {
           <div class="score" data-score>0</div>
         </div>
         <div class="time-block">
+          <span class="mark mark-clock" aria-hidden="true"></span>
           <div class="label">时间</div>
           <div class="time" data-time>0:00</div>
-          <span class="mark mark-clock" aria-hidden="true"></span>
         </div>
-        <div class="right">
-          <div class="next">
-            <div>
-              <div class="label">下一颗</div>
-              <div class="name" data-next-name>—</div>
-            </div>
-            <img data-next-img alt="next" />
+        <div class="next">
+          <div>
+            <div class="label">下一颗</div>
+            <div class="name" data-next-name>—</div>
           </div>
+          <img data-next-img alt="next" />
         </div>
       </div>
       <div class="fail-mark" aria-hidden="true"><span>⚠️ 小心！快要到顶啦！⚠️</span></div>

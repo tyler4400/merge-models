@@ -1,5 +1,5 @@
 /** Invisible Havok box walls. The painted jar lives on the courtyard backdrop. */
-import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
+import { Color3, Quaternion, Vector3 } from "@babylonjs/core/Maths/math";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -95,11 +95,23 @@ export function clampDropX(x: number, radius: number): number {
 }
 
 export function keepInLane(body: PhysicsBody, z?: number): void {
-  const zz = z ?? body.transformNode.getAbsolutePosition().z;
+  const node = body.transformNode;
+  const p = node.getAbsolutePosition();
+  const zz = z ?? p.z;
   const v = body.getLinearVelocity();
   const force = -zz * PHYS.zSpring - v.z * PHYS.zDamp;
-  if (Math.abs(force) < 0.01) return;
-  body.applyForce(new Vector3(0, 0, force), body.transformNode.getAbsolutePosition());
+  if (Math.abs(force) >= 0.01) {
+    body.applyForce(new Vector3(0, 0, force), p);
+  }
+  if (Math.abs(zz) > PHYS.zClamp) {
+    const pos = p.clone();
+    pos.z = clamp(zz, -PHYS.zClamp, PHYS.zClamp);
+    const rot =
+      node.rotationQuaternion?.clone() ??
+      Quaternion.FromEulerAngles(node.rotation.x, node.rotation.y, node.rotation.z);
+    body.setTargetTransform(pos, rot);
+    body.setLinearVelocity(new Vector3(v.x, v.y, 0));
+  }
 }
 
 export const isBodySettled = bodySettled;

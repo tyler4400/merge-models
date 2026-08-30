@@ -1,9 +1,12 @@
-/** Procedural Web Audio: collide, merge (louder by tier), shatter, alarm, win. Unlock on first gesture. */
+/** Procedural Web Audio: collide, merge, shatter, alarm, win. Unlock on first gesture. */
 export class Sfx {
   private ctx: AudioContext | null = null;
   private unlocked = false;
-  private alarm: { timer: number } | null = null;
+  private alarm: { timer: number; osc: OscillatorNode | null; gain: GainNode | null } | null = null;
   private lastCollide = 0;
+  private lastMerge = 0;
+  private voices = 0;
+  private readonly maxVoices = 3;
 
   unlock(): void {
     if (!this.ctx) {
@@ -19,19 +22,57 @@ export class Sfx {
     return this.ctx;
   }
 
-  /** Short glass-marble clink: contact click + 2-3 high decaying partials. Quiet, no mid beep. */
+  private takeVoice(): boolean {
+    if (this.voices >= this.maxVoices) return false;
+    this.voices++;
+    return true;
+  }
+
+  private releaseVoice(): void {
+    this.voices = Math.max(0, this.voices - 1);
+  }
+
+  private disconnectAll(nodes: AudioNode[]): void {
+    for (const n of nodes) {
+      try {
+        n.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }
+  }
+
+  /** One voice slot shared by a handful of oscillators; disconnect everyone on ended. */
+  private arm(src: AudioScheduledSourceNode, extras: AudioNode[], onLast: () => void): void {
+    src.addEventListener(
+      "ended",
+      () => {
+        this.disconnectAll([src, ...extras]);
+        onLast();
+      },
+      { once: true },
+    );
+  }
+
+  /** Short glass-marble clink. Global voice cap + slower gate so piles don't machine-gun. */
   collide(impulse: number): void {
     const ctx = this.dest();
     if (!ctx) return;
     const now = ctx.currentTime;
-    if (now - this.lastCollide < 0.12) return;
-    if (impulse < 0.55) return;
+    if (now - this.lastCollide < 0.22) return;
+    if (impulse < 1.35) return;
+    if (!this.takeVoice()) return;
     this.lastCollide = now;
 
-    const t = Math.min(1, Math.max(0, (impulse - 0.55) / 6));
+    const t = Math.min(1, Math.max(0, (impulse - 1.35) / 6));
     const dur = 0.07 + t * 0.07;
     const clickDur = 0.02 + t * 0.02;
     const vol = 0.016 + t * 0.022;
+    let left = 0;
+    const done = (): void => {
+      left--;
+      if (left <= 0) this.releaseVoice();
+    };
 
     const nLen = Math.max(32, Math.floor(ctx.sampleRate * 0.04));
     const buf = ctx.createBuffer(1, nLen, ctx.sampleRate);
@@ -52,6 +93,8 @@ export class Sfx {
     ng.gain.setValueAtTime(vol * 0.85, now);
     ng.gain.exponentialRampToValueAtTime(0.0001, now + clickDur);
     src.connect(hp).connect(bp).connect(ng).connect(ctx.destination);
+    left++;
+    this.arm(src, [hp, bp, ng], done);
     src.start(now);
     src.stop(now + 0.045);
 
@@ -69,20 +112,31 @@ export class Sfx {
       g.gain.setValueAtTime(Math.max(0.0001, pvol), now);
       g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
       osc.connect(g).connect(ctx.destination);
+      left++;
+      this.arm(osc, [g], done);
       osc.start(now);
       osc.stop(now + dur + 0.012);
     }
   }
 
-  /** Short bright glass-combine: high ding + sparkle. Not a musical arpeggio. */
+  /** Short bright glass-combine: high ding + sparkle. Throttled so chains don't stack. */
   merge(tier: number): void {
     const ctx = this.dest();
     if (!ctx) return;
     const now = ctx.currentTime;
+    if (now - this.lastMerge < 0.2) return;
+    if (!this.takeVoice()) return;
+    this.lastMerge = now;
+
     const t = Math.max(0, Math.min(1, (tier - 1) / 9));
     const vol = 0.09 + t * 0.07;
-    const dur = 0.12 + t * 0.08; // < 0.25s
+    const dur = 0.12 + t * 0.08;
     const f0 = 2050 + t * 950;
+    let left = 0;
+    const done = (): void => {
+      left--;
+      if (left <= 0) this.releaseVoice();
+    };
 
     const ratios = [1, 1.52, 2.18];
     for (let i = 0; i < 3; i++) {
@@ -96,6 +150,8 @@ export class Sfx {
       g.gain.setValueAtTime(Math.max(0.0001, pvol), now);
       g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
       osc.connect(g).connect(ctx.destination);
+      left++;
+      this.arm(osc, [g], done);
       osc.start(now);
       osc.stop(now + dur + 0.02);
     }
@@ -119,6 +175,8 @@ export class Sfx {
     ng.gain.setValueAtTime(vol * 0.5, now);
     ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
     src.connect(hp).connect(bp).connect(ng).connect(ctx.destination);
+    left++;
+    this.arm(src, [hp, bp, ng], done);
     src.start(now);
     src.stop(now + 0.07);
   }
@@ -126,7 +184,14 @@ export class Sfx {
   shatter(): void {
     const ctx = this.dest();
     if (!ctx) return;
+    if (!this.takeVoice()) return;
     const now = ctx.currentTime;
+    let left = 0;
+    const done = (): void => {
+      left--;
+      if (left <= 0) this.releaseVoice();
+    };
+
     const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.22, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) {
@@ -141,7 +206,11 @@ export class Sfx {
     g.gain.setValueAtTime(0.18, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
     src.connect(filter).connect(g).connect(ctx.destination);
+    left++;
+    this.arm(src, [filter, g], done);
     src.start(now);
+    src.stop(now + 0.22);
+
     const ping = ctx.createOscillator();
     const pg = ctx.createGain();
     ping.type = "sine";
@@ -150,8 +219,11 @@ export class Sfx {
     pg.gain.setValueAtTime(0.09, now);
     pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
     ping.connect(pg).connect(ctx.destination);
+    left++;
+    this.arm(ping, [pg], done);
     ping.start(now);
     ping.stop(now + 0.22);
+
     const ping2 = ctx.createOscillator();
     const pg2 = ctx.createGain();
     ping2.type = "sine";
@@ -160,36 +232,75 @@ export class Sfx {
     pg2.gain.setValueAtTime(0.05, now);
     pg2.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
     ping2.connect(pg2).connect(ctx.destination);
+    left++;
+    this.arm(ping2, [pg2], done);
     ping2.start(now);
     ping2.stop(now + 0.16);
   }
 
   setAlarm(on: boolean): void {
     const ctx = this.dest();
-    if (!ctx) {
-      return;
-    }
+    if (!ctx) return;
     if (on && !this.alarm) {
+      const stopTickNodes = (): void => {
+        if (!this.alarm) return;
+        if (this.alarm.osc) {
+          try {
+            this.alarm.osc.stop();
+          } catch {
+            /* already stopped */
+          }
+          this.disconnectAll([this.alarm.osc, this.alarm.gain].filter(Boolean) as AudioNode[]);
+          this.alarm.osc = null;
+          this.alarm.gain = null;
+        }
+      };
       const tick = (): void => {
         const ac = this.dest();
         if (!ac || !this.alarm) return;
+        stopTickNodes();
+        if (this.voices >= this.maxVoices) {
+          this.alarm.timer = window.setTimeout(tick, 1400);
+          return;
+        }
         const t0 = ac.currentTime;
         const osc = ac.createOscillator();
         const gain = ac.createGain();
         osc.type = "sine";
-        osc.frequency.value = 3900 + Math.random() * 280;
-        gain.gain.setValueAtTime(0.01, t0);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.035);
+        osc.frequency.value = 980;
+        gain.gain.setValueAtTime(0.0024, t0);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.07);
         osc.connect(gain).connect(ac.destination);
+        this.alarm.osc = osc;
+        this.alarm.gain = gain;
+        osc.addEventListener(
+          "ended",
+          () => {
+            this.disconnectAll([osc, gain]);
+            if (this.alarm && this.alarm.osc === osc) {
+              this.alarm.osc = null;
+              this.alarm.gain = null;
+            }
+          },
+          { once: true },
+        );
         osc.start(t0);
-        osc.stop(t0 + 0.04);
-        this.alarm.timer = window.setTimeout(tick, 430);
+        osc.stop(t0 + 0.08);
+        this.alarm.timer = window.setTimeout(tick, 1400);
       };
-      this.alarm = { timer: 0 };
+      this.alarm = { timer: 0, osc: null, gain: null };
       tick();
     }
     if (!on && this.alarm) {
       window.clearTimeout(this.alarm.timer);
+      if (this.alarm.osc) {
+        try {
+          this.alarm.osc.stop();
+        } catch {
+          /* already stopped */
+        }
+        this.disconnectAll([this.alarm.osc, this.alarm.gain].filter(Boolean) as AudioNode[]);
+      }
       this.alarm = null;
     }
   }
@@ -197,8 +308,14 @@ export class Sfx {
   win(): void {
     const ctx = this.dest();
     if (!ctx) return;
+    if (!this.takeVoice()) return;
     const now = ctx.currentTime;
     const notes = [523, 659, 784, 1046];
+    let left = notes.length;
+    const done = (): void => {
+      left--;
+      if (left <= 0) this.releaseVoice();
+    };
     notes.forEach((f, i) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
@@ -209,6 +326,7 @@ export class Sfx {
       g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
       osc.connect(g).connect(ctx.destination);
+      this.arm(osc, [g], done);
       osc.start(t);
       osc.stop(t + 0.36);
     });

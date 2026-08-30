@@ -1,5 +1,6 @@
-/** Opaque unlit marble + inner core + rolling spherical-cap stickers + sharp spec glint. */
+/** Lit PBR glass marble + rolling ±Z logo caps + tiny spec glint. */
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
@@ -136,30 +137,24 @@ export function preloadBallIcons(scene: Scene): Promise<void> {
   return Promise.all(jobs).then(() => undefined);
 }
 
-function shellMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
+function shellMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const def = getTier(tier);
   const tint = new Color3(def.tint[0], def.tint[1], def.tint[2]);
-  const m = new StandardMaterial(`shell-${id}`, scene);
-  m.disableLighting = true;
-  m.emissiveColor = tint;
-  m.diffuseColor = tint;
-  m.specularColor = new Color3(0, 0, 0);
-  m.alpha = 1;
-  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
+  const m = new PBRMaterial(`shell-${id}`, scene);
+  m.albedoColor = tint;
+  m.metallic = 0;
+  m.roughness = 0.16;
+  m.environmentIntensity = 1;
+  m.directIntensity = 1.05;
+  m.specularIntensity = 0.65;
+  m.clearCoat.isEnabled = true;
+  m.clearCoat.intensity = 0.9;
+  m.clearCoat.roughness = 0.1;
+  m.unlit = false;
+  m.disableLighting = false;
   m.backFaceCulling = true;
-  return m;
-}
-
-function coreMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
-  const def = getTier(tier);
-  const tint = new Color3(def.tint[0] * 0.55, def.tint[1] * 0.55, def.tint[2] * 0.55);
-  const m = new StandardMaterial(`core-${id}`, scene);
-  m.disableLighting = true;
-  m.emissiveColor = tint;
-  m.diffuseColor = tint;
-  m.specularColor = new Color3(0, 0, 0);
   m.alpha = 1;
-  m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
+  m.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
   return m;
 }
 
@@ -168,7 +163,7 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const tex = iconTexture(scene, tier);
   dm.diffuseTexture = tex;
   dm.emissiveTexture = tex;
-  dm.emissiveColor = new Color3(1, 1, 1);
+  dm.emissiveColor = new Color3(0.92, 0.92, 0.92);
   dm.diffuseColor = new Color3(1, 1, 1);
   dm.specularColor = new Color3(0, 0, 0);
   dm.disableLighting = true;
@@ -180,7 +175,7 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   return dm;
 }
 
-/** Disc projected onto a sphere so the icon follows curvature. Sits just outside the opaque shell. */
+/** Disc projected onto a sphere so the icon follows curvature. Camera-plane ±Z only. */
 function stickerCap(
   scene: Scene,
   name: string,
@@ -189,7 +184,7 @@ function stickerCap(
   mat: StandardMaterial,
 ): Mesh {
   const rOn = radius * 1.012;
-  const capR = radius * 0.46;
+  const capR = radius * 0.36;
   const disc = MeshBuilder.CreateDisc(name, { radius: capR, tessellation: 48, updatable: true }, scene);
   const pos = disc.getVerticesData(VertexBuffer.PositionKind);
   if (pos) {
@@ -213,14 +208,14 @@ function stickerCap(
   return disc;
 }
 
-function glintMat(scene: Scene, id: number, alpha: number): StandardMaterial {
-  const gm = new StandardMaterial(`glint-mat-${id}-${alpha}`, scene);
+function glintMat(scene: Scene, id: number): StandardMaterial {
+  const gm = new StandardMaterial(`glint-mat-${id}`, scene);
   gm.disableLighting = true;
   gm.emissiveColor = new Color3(1, 1, 1);
   gm.diffuseColor = new Color3(1, 1, 1);
   gm.specularColor = new Color3(0, 0, 0);
-  gm.alpha = alpha;
-  gm.transparencyMode = alpha < 1 ? StandardMaterial.MATERIAL_ALPHABLEND : StandardMaterial.MATERIAL_OPAQUE;
+  gm.alpha = 0.72;
+  gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   gm.disableDepthWrite = true;
   return gm;
 }
@@ -231,9 +226,8 @@ export class Ball {
   readonly radius: number;
   readonly mass: number;
   readonly mesh: Mesh;
-  /** Front sticker. Kept as `face` for Game.ts ghost. */
+  /** Front (+Z) sticker. */
   readonly face: Mesh;
-  readonly core: Mesh;
   readonly glint: Mesh;
   aggregate: PhysicsAggregate | null = null;
   merging = false;
@@ -260,49 +254,25 @@ export class Ball {
     mesh.metadata = { ballId: this.id };
     this.mesh = mesh;
 
-    // Core radius 0.55R, sticker cap at 1.012R — plane never cuts the core.
-    const core = MeshBuilder.CreateSphere(
-      `core-${this.id}`,
-      { diameter: def.radius * 1.1, segments: 16 },
-      scene,
-    );
-    core.parent = mesh;
-    core.position.set(0, 0, 0);
-    core.material = coreMat(scene, tier, this.id);
-    core.isPickable = false;
-    this.core = core;
-
     const dm = logoMat(scene, tier, this.id);
     const r = def.radius;
+    // Camera sits at +Z; ±Z caps only — never stamp -Y (white belly).
     const face = stickerCap(scene, "face-" + String(this.id), r, 0, dm);
     face.parent = mesh;
     stickerCap(scene, "face-zb-" + String(this.id), r, Math.PI, dm).parent = mesh;
-    stickerCap(scene, "face-x-" + String(this.id), r, Math.PI / 2, dm).parent = mesh;
-    stickerCap(scene, "face-xb-" + String(this.id), r, -Math.PI / 2, dm).parent = mesh;
     this.face = face;
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
-      { diameter: def.radius * 0.16, segments: 10 },
+      { diameter: def.radius * 0.11, segments: 8 },
       scene,
     );
     glint.parent = mesh;
-    glint.position.set(def.radius * -0.28, def.radius * 0.42, def.radius * 0.78);
-    glint.material = glintMat(scene, this.id, 1);
+    glint.position.set(def.radius * -0.22, def.radius * 0.38, def.radius * 0.82);
+    glint.material = glintMat(scene, this.id);
     glint.isPickable = false;
     glint.renderingGroupId = 1;
     this.glint = glint;
-
-    const glow = MeshBuilder.CreateSphere(
-      `glint-glow-${this.id}`,
-      { diameter: def.radius * 0.34, segments: 10 },
-      scene,
-    );
-    glow.parent = mesh;
-    glow.position.copyFrom(glint.position);
-    glow.material = glintMat(scene, this.id, 0.4);
-    glow.isPickable = false;
-    glow.renderingGroupId = 1;
   }
 
   enablePhysics(scene: Scene): void {
@@ -368,7 +338,6 @@ export class Ball {
     this.aggregate = null;
     this.face.dispose();
     this.glint.dispose();
-    this.core.dispose();
     this.mesh.dispose();
   }
 }

@@ -58,21 +58,21 @@ export async function createApp(
   camera.orthoTop = VIEW.halfH;
 
   const hemi = new HemisphericLight("hemi", new Vector3(0.25, 1, 0.4), scene);
-  hemi.intensity = 1.05;
+  hemi.intensity = 1.22;
   hemi.diffuse = new Color3(1, 0.98, 0.94);
-  hemi.groundColor = new Color3(0.72, 0.78, 0.82);
+  hemi.groundColor = new Color3(0.38, 0.44, 0.42);
 
   const key = new DirectionalLight("key", new Vector3(-0.4, -1, -0.25), scene);
-  key.intensity = 1.25;
+  key.intensity = 1.55;
   key.diffuse = new Color3(1, 0.98, 0.92);
   key.position = new Vector3(6, 16, 8);
 
   const fill = new PointLight("fill", new Vector3(-3.5, 7.5, 4), scene);
-  fill.intensity = 0.55;
+  fill.intensity = 0.62;
   fill.diffuse = new Color3(0.55, 0.75, 1);
 
   const rim = new PointLight("rim", new Vector3(5, 6, -3), scene);
-  rim.intensity = 0.4;
+  rim.intensity = 0.48;
   rim.diffuse = new Color3(1, 0.85, 0.55);
 
   const rig = buildContainer(scene);

@@ -20,7 +20,7 @@ const INNER_W = 8;
 export const TANK = {
   innerWidth: INNER_W,
   innerHeight: INNER_W * (SCREEN.jarInnerH / SCREEN.jarInnerW),
-  innerDepth: 4.5,
+  innerDepth: 1.2,
   wall: INNER_W * (28 / SCREEN.jarInnerW),
 } as const;
 
@@ -57,8 +57,9 @@ export const PHYS = {
   wallFriction: 0.6,
   linearDamping: 0.1,
   angularDamping: 0.08,
-  zSpring: 18,
-  zDamp: 8,
+  zSpring: 52,
+  zDamp: 22,
+  zClamp: 0.2,
 } as const;
 
 export const HAMMER_COUNT = 3;

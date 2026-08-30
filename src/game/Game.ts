@@ -45,7 +45,6 @@ export class Game {
   combo = 0;
   balls: Ball[] = [];
   held: Ball | null = null;
-  ghost: Ball | null = null;
   dropX = 0;
   keyLeft = false;
   keyRight = false;
@@ -100,8 +99,8 @@ export class Game {
       const imp = ev.impulse ?? 0;
       if (a && b) {
         this.mergeQueue.push([a, b]);
-        if (imp > 0.45) this.sfx.collide(imp);
-      } else if ((a || b) && imp > 1.1) {
+        if (imp > 1.25) this.sfx.collide(imp);
+      } else if ((a || b) && imp > 2.4) {
         this.sfx.collide(imp * 0.4);
       }
     });
@@ -192,9 +191,7 @@ export class Game {
   private resetRun(full: boolean): void {
     for (const b of [...this.balls]) this.removeBall(b);
     this.held?.dispose();
-    this.ghost?.dispose();
     this.held = null;
-    this.ghost = null;
     this.balls = [];
     this.idMap.clear();
     this.bodyMap.clear();
@@ -241,8 +238,6 @@ export class Game {
   }
 
   private spawnHeld(): void {
-    this.ghost?.dispose();
-    this.ghost = null;
     if (this.held) return;
     const tier = this.queue.take() as TierId;
     const pos = new Vector3(this.dropX, DROP.y, 0);
@@ -250,12 +245,6 @@ export class Game {
     held.held = true;
     this.held = held;
     this.register(held);
-
-    const ghost = new Ball(this.scene, tier, pos);
-    ghost.held = true;
-    ghost.mesh.visibility = 0.2;
-    ghost.setLogoVisible(0);
-    this.ghost = ghost;
     this.syncHeld();
     this.hud.setNext(this.queue.peek() as TierId);
   }
@@ -264,7 +253,6 @@ export class Game {
     const radius = this.held?.radius ?? getTier(1).radius;
     this.dropX = clampDropX(this.dropX, radius);
     if (this.held) this.held.mesh.position.set(this.dropX, DROP.y, 0);
-    if (this.ghost) this.ghost.mesh.position.set(this.dropX, DROP.y - 0.04, 0.02);
     if (this.guide) {
       this.guide.position.x = this.dropX;
       this.guide.alpha = this.canDrop() ? 0.38 : 0.12;
@@ -297,8 +285,6 @@ export class Game {
     if (ball.body) this.bodyMap.set(ball.body, ball);
     this.balls.push(ball);
     this.held = null;
-    this.ghost?.dispose();
-    this.ghost = null;
     this.pending = ball;
     this.pendingAge = 0;
     this.pendingSettledFor = 0;
