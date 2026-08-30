@@ -175,7 +175,7 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   dm.useAlphaFromDiffuseTexture = true;
   dm.transparencyMode = StandardMaterial.MATERIAL_ALPHATEST;
   dm.alphaCutOff = 0.46;
-  dm.zOffset = -12;
+  dm.zOffset = -20;
   return dm;
 }
 
@@ -187,7 +187,7 @@ function stickerCap(
   rotY: number,
   mat: StandardMaterial,
 ): Mesh {
-  const rOn = radius * 1.012;
+  const rOn = radius * 1.04;
   const capR = radius * 0.72;
   const disc = MeshBuilder.CreateDisc(name, { radius: capR, tessellation: 48, updatable: true }, scene);
   const pos = disc.getVerticesData(VertexBuffer.PositionKind);
