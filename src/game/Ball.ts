@@ -1,4 +1,4 @@
-/** Tinted glass shell + opaque inner core; agent icon sealed in the core, not on the outer surface. */
+/** Whisper-tinted glass shell; a distinct 3D core sits in the geometric center with the icon on it. */
 import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
@@ -17,7 +17,8 @@ let nextId = 1;
 const iconCache = new Map<number, DynamicTexture>();
 const iconImages = new Map<number, HTMLImageElement>();
 
-const CORE_RATIO = 0.62;
+/** Inner figurine ~ half the marble, so glass thickness reads around it. */
+const CORE_RATIO = 0.5;
 
 /** Punch near-black that touches transparent (clip edge), so K/ChatGPT glyphs sit on the marble. */
 function knockOutDarkBackdrop(ctx: CanvasRenderingContext2D, size: number): void {
@@ -145,14 +146,14 @@ function tintOf(tier: TierId): Color3 {
   return new Color3(t[0], t[1], t[2]);
 }
 
-/** Opaque colored nucleus — always reads as a volume even if the glass layer fails. */
+/** Saturated figurine — identity even with the logo ignored. */
 function coreMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const tint = tintOf(tier);
   const m = new StandardMaterial(`core-${id}`, scene);
   m.diffuseColor = tint;
-  m.emissiveColor = tint.scale(0.55);
-  m.specularColor = new Color3(0.38, 0.38, 0.38);
-  m.specularPower = 40;
+  m.emissiveColor = tint.scale(0.42);
+  m.specularColor = new Color3(0.55, 0.5, 0.4);
+  m.specularPower = 48;
   m.alpha = 1;
   m.transparencyMode = StandardMaterial.MATERIAL_OPAQUE;
   m.backFaceCulling = true;
@@ -161,17 +162,18 @@ function coreMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
 }
 
 /**
- * Tinted glass. StandardMaterial + opacity Fresnel (not PBR refraction) so the rim
- * stays visible on mobile WebGL. Center is more see-through so the inner icon reads.
+ * Whisper-tinted crystal. StandardMaterial + opacity Fresnel (not PBR refraction)
+ * so the rim stays visible on mobile while the center stays see-through.
  */
 function glassMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const tint = tintOf(tier);
+  const pale = Color3.Lerp(tint, new Color3(1, 1, 1), 0.78);
   const m = new StandardMaterial(`glass-${id}`, scene);
-  m.diffuseColor = tint;
-  m.emissiveColor = tint.scale(0.22);
+  m.diffuseColor = pale;
+  m.emissiveColor = tint.scale(0.08);
   m.specularColor = new Color3(1, 1, 1);
-  m.specularPower = 96;
-  m.alpha = 0.34;
+  m.specularPower = 128;
+  m.alpha = 0.16;
   m.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   m.needDepthPrePass = true;
   m.backFaceCulling = false;
@@ -179,17 +181,17 @@ function glassMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   m.disableLighting = false;
   const op = new FresnelParameters();
   op.isEnabled = true;
-  op.power = 1.9;
-  op.bias = 0.16;
+  op.power = 2.4;
+  op.bias = 0.08;
   op.leftColor = new Color3(1, 1, 1);
-  op.rightColor = new Color3(0.08, 0.08, 0.08);
+  op.rightColor = new Color3(0.04, 0.04, 0.04);
   m.opacityFresnelParameters = op;
   const em = new FresnelParameters();
   em.isEnabled = true;
-  em.power = 1.5;
-  em.bias = 0.12;
-  em.leftColor = new Color3(0.85, 0.92, 1);
-  em.rightColor = tint.scale(0.18);
+  em.power = 1.8;
+  em.bias = 0.1;
+  em.leftColor = new Color3(0.92, 0.96, 1);
+  em.rightColor = tint.scale(0.06);
   m.emissiveFresnelParameters = em;
   return m;
 }
@@ -200,7 +202,7 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   dm.diffuseTexture = tex;
   dm.emissiveTexture = tex;
   dm.emissiveColor = new Color3(1, 1, 1);
-  dm.zOffset = -4;
+  dm.zOffset = -2;
   dm.diffuseColor = new Color3(1, 1, 1);
   dm.specularColor = new Color3(0, 0, 0);
   dm.disableLighting = true;
@@ -214,8 +216,8 @@ function logoMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
 function backingMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   const tint = tintOf(tier);
   const m = new StandardMaterial("back-mat-" + String(id), scene);
-  m.diffuseColor = Color3.Lerp(tint, new Color3(1, 1, 1), 0.55);
-  m.emissiveColor = Color3.Lerp(tint, new Color3(1, 1, 1), 0.35).scale(0.85);
+  m.diffuseColor = Color3.Lerp(tint, new Color3(1, 1, 1), 0.28);
+  m.emissiveColor = tint.scale(0.35);
   m.specularColor = new Color3(0.2, 0.2, 0.2);
   m.specularPower = 32;
   m.alpha = 1;
@@ -224,37 +226,97 @@ function backingMat(scene: Scene, tier: TierId, id: number): StandardMaterial {
   return m;
 }
 
-/** Flat disc on the inner core (±Z). Rolls with the ball; not projected onto the outer glass. */
-function coreCap(
-  scene: Scene,
-  name: string,
-  coreR: number,
-  zSign: number,
-  mat: StandardMaterial,
-  group: number,
-  radiusScale: number,
-  zScale: number,
-): Mesh {
-  const disc = MeshBuilder.CreateDisc(name, { radius: coreR * radiusScale, tessellation: 48 }, scene);
-  disc.material = mat;
-  disc.isPickable = false;
-  disc.billboardMode = 0;
-  disc.position.z = zSign * coreR * zScale;
-  disc.rotation.y = zSign < 0 ? Math.PI : 0;
-  disc.renderingGroupId = group;
-  return disc;
-}
-
 function glintMat(scene: Scene, id: number): StandardMaterial {
   const gm = new StandardMaterial(`glint-mat-${id}`, scene);
   gm.disableLighting = true;
   gm.emissiveColor = new Color3(1, 1, 1);
   gm.diffuseColor = new Color3(1, 1, 1);
   gm.specularColor = new Color3(0, 0, 0);
-  gm.alpha = 0.78;
+  gm.alpha = 0.7;
   gm.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
   gm.disableDepthWrite = true;
   return gm;
+}
+
+/** Unique inner silhouette per tier, fitted inside a sphere of radius coreR. */
+function innerCore(scene: Scene, id: number, tier: TierId, coreR: number): { mesh: Mesh; faceZ: number } {
+  const name = `core-${id}`;
+  let mesh: Mesh;
+  switch (tier) {
+    case 1:
+      mesh = MeshBuilder.CreateSphere(name, { diameter: 2, segments: 24 }, scene);
+      break;
+    case 2:
+      mesh = MeshBuilder.CreateBox(name, { width: 2.35, height: 0.92, depth: 1.35 }, scene);
+      break;
+    case 3: {
+      mesh = MeshBuilder.CreateCylinder(
+        name,
+        { height: 1.2, diameter: 2, tessellation: 6 },
+        scene,
+      );
+      mesh.rotation.x = Math.PI / 2;
+      break;
+    }
+    case 4:
+      mesh = MeshBuilder.CreateCapsule(name, { height: 2.2, radius: 0.6, tessellation: 12 }, scene);
+      break;
+    case 5:
+      mesh = MeshBuilder.CreateIcoSphere(name, { radius: 1, subdivisions: 1 }, scene);
+      break;
+    case 6:
+      mesh = MeshBuilder.CreatePolyhedron(name, { type: 1, size: 1 }, scene);
+      break;
+    case 7:
+      mesh = MeshBuilder.CreateTorus(
+        name,
+        { diameter: 1.6, thickness: 0.52, tessellation: 28 },
+        scene,
+      );
+      mesh.rotation.x = Math.PI / 2;
+      break;
+    case 8:
+      mesh = MeshBuilder.CreateCylinder(
+        name,
+        { height: 1.75, diameter: 1.5, tessellation: 24 },
+        scene,
+      );
+      break;
+    case 9:
+      mesh = MeshBuilder.CreateCylinder(
+        name,
+        { height: 2.05, diameterTop: 0.08, diameterBottom: 1.9, tessellation: 24 },
+        scene,
+      );
+      break;
+    default:
+      mesh = MeshBuilder.CreateBox(name, { width: 1.5, height: 1.7, depth: 1.35 }, scene);
+      break;
+  }
+  mesh.computeWorldMatrix(true);
+  const br = mesh.getBoundingInfo().boundingSphere.radius;
+  if (br > 1e-6) mesh.scaling.scaleInPlace(coreR / br);
+  mesh.computeWorldMatrix(true);
+  const faceZ = Math.abs(mesh.getBoundingInfo().boundingBox.extendSize.z) * Math.abs(mesh.scaling.z);
+  return { mesh, faceZ: Math.max(faceZ, coreR * 0.32) };
+}
+
+function coreCap(
+  scene: Scene,
+  name: string,
+  radius: number,
+  z: number,
+  zSign: number,
+  mat: StandardMaterial,
+): Mesh {
+  const disc = MeshBuilder.CreateDisc(name, { radius, tessellation: 48 }, scene);
+  disc.material = mat;
+  disc.isPickable = false;
+  disc.billboardMode = 0;
+  disc.position.z = zSign * z;
+  disc.rotation.y = zSign < 0 ? Math.PI : 0;
+  disc.renderingGroupId = 0;
+  return disc;
 }
 
 export class Ball {
@@ -265,7 +327,7 @@ export class Ball {
   /** Outer glass shell — Havok sphere is attached here. */
   readonly mesh: Mesh;
   readonly core: Mesh;
-  /** Front (+Z) inner logo. */
+  /** Front (+Z) inner logo, on the figurine, behind the glass. */
   readonly face: Mesh;
   readonly glint: Mesh;
   aggregate: PhysicsAggregate | null = null;
@@ -298,33 +360,31 @@ export class Ball {
     mesh.renderingGroupId = 1;
     this.mesh = mesh;
 
-    const core = MeshBuilder.CreateSphere(
-      `core-${this.id}`,
-      { diameter: coreR * 2, segments: 24 },
-      scene,
-    );
-    core.parent = mesh;
-    core.material = coreMat(scene, tier, this.id);
-    core.isPickable = false;
-    core.renderingGroupId = 0;
-    this.core = core;
+    const inner = innerCore(scene, this.id, tier, coreR);
+    inner.mesh.parent = mesh;
+    inner.mesh.material = coreMat(scene, tier, this.id);
+    inner.mesh.isPickable = false;
+    inner.mesh.renderingGroupId = 0;
+    this.core = inner.mesh;
 
     const bm = backingMat(scene, tier, this.id);
-    coreCap(scene, "back-" + String(this.id), coreR, 1, bm, 0, 0.9, 1.02).parent = mesh;
-    coreCap(scene, "back-zb-" + String(this.id), coreR, -1, bm, 0, 0.9, 1.02).parent = mesh;
     const dm = logoMat(scene, tier, this.id);
-    const face = coreCap(scene, "face-" + String(this.id), coreR, 1, dm, 2, 0.88, 1.08);
+    const logoR = coreR * 0.72;
+    const faceZ = inner.faceZ * 1.04;
+    coreCap(scene, "back-" + String(this.id), logoR, faceZ, 1, bm).parent = mesh;
+    coreCap(scene, "back-zb-" + String(this.id), logoR, faceZ, -1, bm).parent = mesh;
+    const face = coreCap(scene, "face-" + String(this.id), logoR, faceZ, 1, dm);
     face.parent = mesh;
-    coreCap(scene, "face-zb-" + String(this.id), coreR, -1, dm, 2, 0.88, 1.08).parent = mesh;
+    coreCap(scene, "face-zb-" + String(this.id), logoR, faceZ, -1, dm).parent = mesh;
     this.face = face;
 
     const glint = MeshBuilder.CreateSphere(
       `glint-${this.id}`,
-      { diameter: r * 0.12, segments: 8 },
+      { diameter: r * 0.11, segments: 8 },
       scene,
     );
     glint.parent = mesh;
-    glint.position.set(r * -0.22, r * 0.38, r * 0.78);
+    glint.position.set(r * -0.22, r * 0.38, r * 0.82);
     glint.material = glintMat(scene, this.id);
     glint.isPickable = false;
     glint.renderingGroupId = 1;
@@ -386,7 +446,7 @@ export class Ball {
     this.face.visibility = v;
     this.core.visibility = v;
     for (const c of this.mesh.getChildMeshes()) {
-      if (c.name.startsWith("face")) c.visibility = v;
+      if (c.name.startsWith("face") || c.name.startsWith("back")) c.visibility = v;
     }
   }
 
