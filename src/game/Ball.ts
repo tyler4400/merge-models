@@ -143,14 +143,14 @@ function shellMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const m = new PBRMaterial(`shell-${id}`, scene);
   m.albedoColor = tint;
   m.metallic = 0;
-  m.roughness = 0.18;
-  m.environmentIntensity = 0.55;
+  m.roughness = 0.22;
+  m.environmentIntensity = 0.4;
   m.directIntensity = 1.2;
   m.specularIntensity = 0.42;
-  m.emissiveColor = new Color3(def.tint[0] * 0.32, def.tint[1] * 0.32, def.tint[2] * 0.32);
+  m.emissiveColor = new Color3(def.tint[0] * 0.4, def.tint[1] * 0.4, def.tint[2] * 0.4);
   m.emissiveIntensity = 0.5;
   m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 0.62;
+  m.clearCoat.intensity = 0.4;
   m.clearCoat.roughness = 0.2;
   m.unlit = false;
   m.disableLighting = false;
@@ -188,7 +188,7 @@ function stickerCap(
   mat: StandardMaterial,
 ): Mesh {
   const rOn = radius * 1.012;
-  const capR = radius * 0.36;
+  const capR = radius * 0.72;
   const disc = MeshBuilder.CreateDisc(name, { radius: capR, tessellation: 48, updatable: true }, scene);
   const pos = disc.getVerticesData(VertexBuffer.PositionKind);
   if (pos) {
@@ -208,7 +208,7 @@ function stickerCap(
   disc.isPickable = false;
   disc.billboardMode = 0;
   disc.rotation.y = rotY;
-  disc.renderingGroupId = 1;
+  disc.renderingGroupId = 0;
   return disc;
 }
 
@@ -239,6 +239,7 @@ export class Ball {
   settleClock = 0;
   failClock = 0;
   unrestClock = 0;
+  dropAge = 0;
 
   constructor(scene: Scene, tier: TierId, pos: Vector3) {
     const def = getTier(tier);
@@ -256,6 +257,8 @@ export class Ball {
     mesh.material = shellMat(scene, tier, this.id);
     mesh.isPickable = true;
     mesh.metadata = { ballId: this.id };
+    mesh.visibility = 1;
+    mesh.renderingGroupId = 0;
     this.mesh = mesh;
 
     const dm = logoMat(scene, tier, this.id);
@@ -275,7 +278,7 @@ export class Ball {
     glint.position.set(def.radius * -0.22, def.radius * 0.38, def.radius * 0.82);
     glint.material = glintMat(scene, this.id);
     glint.isPickable = false;
-    glint.renderingGroupId = 1;
+    glint.renderingGroupId = 0;
     this.glint = glint;
   }
 
@@ -295,6 +298,7 @@ export class Ball {
     tuneBallBody(agg.body);
     this.aggregate = agg;
     this.held = false;
+    this.dropAge = 0;
     this.nudgeSpin();
   }
 

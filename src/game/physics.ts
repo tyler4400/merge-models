@@ -94,24 +94,20 @@ export function clampDropX(x: number, radius: number): number {
   return clamp(x, -limit, limit);
 }
 
-export function keepInLane(body: PhysicsBody, z?: number): void {
+export function keepInLane(body: PhysicsBody): void {
   const node = body.transformNode;
   const p = node.getAbsolutePosition();
-  const zz = z ?? p.z;
   const v = body.getLinearVelocity();
-  const force = -zz * PHYS.zSpring - v.z * PHYS.zDamp;
-  if (Math.abs(force) >= 0.01) {
-    body.applyForce(new Vector3(0, 0, force), p);
-  }
-  if (Math.abs(zz) > PHYS.zClamp) {
+  const z = clamp(p.z, -PHYS.zClamp, PHYS.zClamp);
+  if (Math.abs(p.z - z) > 1e-4) {
     const pos = p.clone();
-    pos.z = clamp(zz, -PHYS.zClamp, PHYS.zClamp);
+    pos.z = z;
     const rot =
       node.rotationQuaternion?.clone() ??
       Quaternion.FromEulerAngles(node.rotation.x, node.rotation.y, node.rotation.z);
     body.setTargetTransform(pos, rot);
-    body.setLinearVelocity(new Vector3(v.x, v.y, 0));
   }
+  if (v.z !== 0) body.setLinearVelocity(new Vector3(v.x, v.y, 0));
 }
 
 export const isBodySettled = bodySettled;

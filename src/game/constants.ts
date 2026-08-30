@@ -20,7 +20,7 @@ const INNER_W = 8;
 export const TANK = {
   innerWidth: INNER_W,
   innerHeight: INNER_W * (SCREEN.jarInnerH / SCREEN.jarInnerW),
-  innerDepth: 1.2,
+  innerDepth: 6.5, // T-800 diameter 5.5 + slack; front/back must not pinch
   wall: INNER_W * (28 / SCREEN.jarInnerW),
 } as const;
 
@@ -33,15 +33,16 @@ export const VIEW = {
   yMax: TANK.innerHeight + SCREEN.jarTop * WORLD_PER_PX,
 } as const;
 
+export const FAIL_LINE_Y = TANK.innerHeight * 0.9;
+export const FAIL_HOLD_SEC = 2.0;
+export const FAIL_DROP_GRACE = 0.8;
+export const WARN_SLACK = 1.2;
+
 export const DROP = {
-  y: TANK.innerHeight - 0.42,
+  y: FAIL_LINE_Y - 0.8,
   moveSpeed: 9.4,
   wallPad: 0.05,
 } as const;
-
-export const FAIL_LINE_Y = TANK.innerHeight * (1 - 48 / SCREEN.jarInnerH);
-export const FAIL_HOLD_SEC = 2.0;
-export const WARN_SLACK = 1.2;
 
 export const REST = {
   linSpeed: 0.28,
@@ -59,7 +60,7 @@ export const PHYS = {
   angularDamping: 0.08,
   zSpring: 52,
   zDamp: 22,
-  zClamp: 0.2,
+  zClamp: 0.18,
 } as const;
 
 export const HAMMER_COUNT = 3;

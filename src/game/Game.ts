@@ -109,8 +109,15 @@ export class Game {
     this.hud.setHammers(this.hammers.left, false);
     this.bindInput();
 
-    if (typeof location !== "undefined" && location.search.includes("shot=play")) {
-      window.setTimeout(() => this.autoshot(), 350);
+    if (typeof window !== "undefined") {
+      (window as unknown as { __mergeGame: Game }).__mergeGame = this;
+    }
+    if (typeof location !== "undefined") {
+      if (location.search.includes("shot=play")) {
+        window.setTimeout(() => this.autoshot(), 350);
+      } else if (location.search.includes("shot=drop")) {
+        window.setTimeout(() => this.autoshotDrop(), 350);
+      }
     }
   }
 
@@ -156,6 +163,7 @@ export class Game {
 
     for (const ball of this.balls) {
       if (ball.held || ball.merging || !ball.body) continue;
+      ball.dropAge += dt;
       keepInLane(ball.body);
       if (bodySettled(ball.body)) {
         ball.settleClock += dt;
@@ -243,6 +251,8 @@ export class Game {
     const pos = new Vector3(this.dropX, DROP.y, 0);
     const held = new Ball(this.scene, tier, pos);
     held.held = true;
+    held.mesh.visibility = 1;
+    held.setLogoVisible(1);
     this.held = held;
     this.register(held);
     this.syncHeld();
@@ -475,9 +485,27 @@ export class Game {
       [2.8, 1.2, 1],
       [-1.8, 2.6, 2],
       [0.4, 2.7, 4],
+      [-1.2, DROP.y, 2],
+      [1.6, DROP.y, 3],
     ];
     for (const [x, y, tier] of spots) {
       const ball = new Ball(this.scene, tier, new Vector3(x, y, 0));
+      ball.enablePhysics(this.scene);
+      this.balls.push(ball);
+      this.register(ball);
+    }
+  }
+
+  /** Spawn balls at DROP.y with physics so a headless shot can prove they fall. */
+  autoshotDrop(): void {
+    this.start();
+    const spots: Array<[number, TierId]> = [
+      [-1.5, 2],
+      [1.3, 3],
+    ];
+    for (const [x, tier] of spots) {
+      const ball = new Ball(this.scene, tier, new Vector3(x, DROP.y, 0));
+      ball.mesh.visibility = 1;
       ball.enablePhysics(this.scene);
       this.balls.push(ball);
       this.register(ball);
