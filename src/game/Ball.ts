@@ -143,18 +143,22 @@ function shellMat(scene: Scene, tier: TierId, id: number): PBRMaterial {
   const m = new PBRMaterial(`shell-${id}`, scene);
   m.albedoColor = tint;
   m.metallic = 0;
-  m.roughness = 0.16;
-  m.environmentIntensity = 1;
-  m.directIntensity = 1.05;
-  m.specularIntensity = 0.65;
+  m.roughness = 0.18;
+  m.environmentIntensity = 0.55;
+  m.directIntensity = 1.2;
+  m.specularIntensity = 0.42;
+  m.emissiveColor = new Color3(def.tint[0] * 0.32, def.tint[1] * 0.32, def.tint[2] * 0.32);
+  m.emissiveIntensity = 0.5;
   m.clearCoat.isEnabled = true;
-  m.clearCoat.intensity = 0.9;
-  m.clearCoat.roughness = 0.1;
+  m.clearCoat.intensity = 0.62;
+  m.clearCoat.roughness = 0.2;
   m.unlit = false;
   m.disableLighting = false;
   m.backFaceCulling = true;
   m.alpha = 1;
   m.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+  m.subSurface.isRefractionEnabled = false;
+  m.subSurface.isTranslucencyEnabled = false;
   return m;
 }
 

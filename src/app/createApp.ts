@@ -33,7 +33,7 @@ export async function createApp(
   scene.clearColor = new Color4(0.55, 0.80, 0.96, 1);
   makeSkyBackdrop(scene);
   scene.environmentTexture = makeDayEnv(scene);
-  scene.environmentIntensity = 1.15;
+  scene.environmentIntensity = 0.9;
 
   const havok = await HavokPhysics({ locateFile: () => "/HavokPhysics.wasm" });
   const plugin = new HavokPlugin(true, havok);
@@ -101,11 +101,11 @@ function makeDayEnv(scene: Scene): CubeTexture {
     ctx.fillRect(0, 0, 64, 64);
     return c.toDataURL("image/png");
   };
-  const px = face("#dff2ff", "#b7d8f0");
-  const nx = face("#e8f6ff", "#c5e0f4");
-  const py = face("#ffffff", "#d8eefe");
-  const ny = face("#f4efe4", "#d9d0c2");
-  const pz = face("#e2f3ff", "#bad7ee");
-  const nz = face("#e2f3ff", "#bad7ee");
+  const px = face("#9ec9e8", "#6ea3c8");
+  const nx = face("#a8d0ee", "#74aad0");
+  const py = face("#c5e4fa", "#8ebcdc");
+  const ny = face("#7a6e5c", "#4e463c");
+  const pz = face("#a0cce8", "#6ea3c8");
+  const nz = face("#a0cce8", "#6ea3c8");
   return CubeTexture.CreateFromImages([px, py, pz, nx, ny, nz], scene);
 }
