@@ -6,7 +6,7 @@ export class Sfx {
   private lastCollide = 0;
   private lastMerge = 0;
   private voices = 0;
-  private readonly maxVoices = 3;
+  private readonly maxVoices = 2;
 
   unlock(): void {
     if (!this.ctx) {
@@ -59,12 +59,12 @@ export class Sfx {
     const ctx = this.dest();
     if (!ctx) return;
     const now = ctx.currentTime;
-    if (now - this.lastCollide < 0.22) return;
-    if (impulse < 1.35) return;
+    if (now - this.lastCollide < 0.48) return;
+    if (impulse < 2.8) return;
     if (!this.takeVoice()) return;
     this.lastCollide = now;
 
-    const t = Math.min(1, Math.max(0, (impulse - 1.35) / 6));
+    const t = Math.min(1, Math.max(0, (impulse - 2.8) / 6));
     const dur = 0.07 + t * 0.07;
     const clickDur = 0.02 + t * 0.02;
     const vol = 0.016 + t * 0.022;
@@ -84,11 +84,11 @@ export class Sfx {
     src.buffer = buf;
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 2600 + t * 900;
+    hp.frequency.value = 1900 + t * 700;
     const bp = ctx.createBiquadFilter();
     bp.type = "bandpass";
-    bp.frequency.value = 3800 + t * 1400 + Math.random() * 350;
-    bp.Q.value = 1.15;
+    bp.frequency.value = 2700 + t * 800 + Math.random() * 220;
+    bp.Q.value = 1.1;
     const ng = ctx.createGain();
     ng.gain.setValueAtTime(vol * 0.85, now);
     ng.gain.exponentialRampToValueAtTime(0.0001, now + clickDur);
@@ -98,14 +98,14 @@ export class Sfx {
     src.start(now);
     src.stop(now + 0.045);
 
-    const f0 = 2200 + t * 1100 + Math.random() * 260;
-    const ratios = [1, 1.38 + Math.random() * 0.1, 1.86 + Math.random() * 0.14];
-    const nPartials = 2 + (Math.random() < 0.65 ? 1 : 0);
+    const f0 = 1600 + t * 1000 + Math.random() * 200;
+    const ratios = [1, 1.28 + Math.random() * 0.08, 1.55 + Math.random() * 0.1];
+    const nPartials = 2 + (Math.random() < 0.45 ? 1 : 0);
     for (let i = 0; i < nPartials; i++) {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = "sine";
-      const f = Math.min(4800, Math.max(2200, f0 * ratios[i] + (Math.random() - 0.5) * 90));
+      const f = Math.min(2800, Math.max(1600, f0 * ratios[i] + (Math.random() - 0.5) * 70));
       osc.frequency.setValueAtTime(f, now);
       osc.frequency.exponentialRampToValueAtTime(f * 0.97, now + dur);
       const pvol = vol * (0.5 / (i + 1)) * (0.55 + t * 0.45);

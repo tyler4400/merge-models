@@ -29,6 +29,17 @@ body {
   background: linear-gradient(180deg, #8ec8f4 0%, #d7eefc 42%, #c8e8b8 100%);
 }
 
+#yard {
+  position: absolute;
+  inset: 0 auto auto 0;
+  height: 100%;
+  width: auto;
+  max-width: none;
+  transform: translateX(calc(-519 / 1536 * 100%));
+  pointer-events: none;
+  z-index: 0;
+}
+
 #game {
   position: absolute;
   inset: 0;
@@ -37,6 +48,8 @@ body {
   height: 100%;
   touch-action: none;
   overscroll-behavior: none;
+  opacity: 0; /* physics canvas stays for Havok+input, must not paint over the yard */
+  z-index: 0;
 }
 
 #tokens {

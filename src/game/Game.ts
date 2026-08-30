@@ -1,19 +1,14 @@
 /** Phase machine: title / playing / won / dead / hammerAim. */
-import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { Plane } from "@babylonjs/core/Maths/math.plane";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import { HavokPlugin as HavokPluginCtor } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
-import "@babylonjs/core/Culling/ray";
 import { Sfx } from "../audio/Sfx";
 import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
 import { TokenLayer } from "./TokenLayer";
-import { DROP, MERGE_POP, REST } from "./constants";
+import { DROP, MERGE_POP, REST, VIEW } from "./constants";
 import { FailLine } from "./failLine";
 import { HammerStock, ShatterFx, canSmash } from "./hammer";
 import { planMerge } from "./merge";
@@ -23,8 +18,6 @@ import { createSpawnQueue, type SpawnQueue } from "./spawn";
 import { getTier, type TierId } from "./tiers";
 
 export type Phase = "title" | "playing" | "won" | "dead" | "hammerAim";
-
-const DROP_PLANE = Plane.FromPositionAndNormal(Vector3.Zero(), new Vector3(0, 0, 1));
 
 export class Game {
   readonly scene: Scene;
@@ -60,8 +53,8 @@ export class Game {
   private bodyMap = new Map<object, Ball>();
   private mergeQueue: Array<readonly [Ball, Ball]> = [];
   private freeze = false;
-  private guide: LinesMesh | null = null;
   private inputBound = false;
+  private lastPointer: PointerEvent | null = null;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
     this.scene = scene;
@@ -81,29 +74,25 @@ export class Game {
       onHammer: () => this.toggleHammer(),
     });
 
-    this.guide = MeshBuilder.CreateDashedLines(
-      "drop-guide",
-      {
-        points: [new Vector3(0, DROP.y + 0.35, 0), new Vector3(0, 0.12, 0)],
-        dashSize: 0.16,
-        gapSize: 0.1,
-        dashNb: 48,
-      },
-      scene,
-    );
-    this.guide.color = new Color3(0.95, 0.78, 0.42);
-    this.guide.alpha = 0.2;
-    this.guide.isPickable = false;
-
     this.plugin.onCollisionObservable.add((ev) => {
       const a = this.bodyMap.get(ev.collider);
       const b = this.bodyMap.get(ev.collidedAgainst);
       const imp = ev.impulse ?? 0;
       if (a && b) {
         this.mergeQueue.push([a, b]);
-        if (imp > 1.25) this.sfx.collide(imp);
-      } else if ((a || b) && imp > 2.4) {
-        this.sfx.collide(imp * 0.4);
+        let rel = 0;
+        try {
+          const va = a.body?.getLinearVelocity();
+          const vb = b.body?.getLinearVelocity();
+          if (va && vb) rel = Math.hypot(va.x - vb.x, va.y - vb.y);
+        } catch {
+          /* body gone */
+        }
+        const piled = a.settleClock > 0.15 && b.settleClock > 0.15;
+        if (rel > 1.15 && imp > 2.8 && !piled) this.sfx.collide(imp);
+      } else if (a || b) {
+        const ball = a ?? b;
+        if (ball && imp > 4.8 && ball.dropAge < 0.55) this.sfx.collide(imp * 0.4);
       }
     });
 
@@ -269,10 +258,6 @@ export class Game {
     const radius = this.held?.radius ?? getTier(1).radius;
     this.dropX = clampDropX(this.dropX, radius);
     if (this.held) this.held.mesh.position.set(this.dropX, DROP.y, 0);
-    if (this.guide) {
-      this.guide.position.x = this.dropX;
-      this.guide.alpha = this.canDrop() ? 0.38 : 0.12;
-    }
   }
 
   private stepPending(dt: number): void {
@@ -323,37 +308,43 @@ export class Game {
     this.hud.setHammers(this.hammers.left, false);
   }
 
-  private pointerToX(): void {
-    const cam = this.scene.activeCamera;
-    if (!cam) return;
-    const ray = this.scene.createPickingRay(this.scene.pointerX, this.scene.pointerY, Matrix.Identity(), cam);
-    const dist = ray.intersectsPlane(DROP_PLANE);
-    if (dist === null) return;
-    this.dropX = ray.origin.add(ray.direction.scale(dist)).x;
+  private pointerToX(e?: PointerEvent): void {
+    const ev = e ?? this.lastPointer;
+    if (!ev) return;
+    this.lastPointer = ev;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.max(1, rect.width);
+    const nx = (ev.clientX - rect.left) / w;
+    this.dropX = nx * 2 * VIEW.halfW - VIEW.halfW;
   }
 
   private paintTokens(): void {
     const list = this.held ? this.balls.concat(this.held) : this.balls.slice();
-    this.tokens.draw(list);
+    const showGuide = this.phase === "playing" || this.phase === "hammerAim";
+    this.tokens.draw(list, {
+      dropX: this.dropX,
+      guideAlpha: showGuide ? (this.canDrop() ? 0.55 : 0.2) : 0,
+      warn: this.fail.warning,
+    });
   }
 
-  private pickBall(): Ball | null {
-    return this.tokens.hitTest(this.scene.pointerX, this.scene.pointerY, this.balls);
+  private pickBall(e: PointerEvent): Ball | null {
+    return this.tokens.hitTestCss(e.clientX, e.clientY, this.balls);
   }
 
   private bindInput(): void {
     if (this.inputBound) return;
     this.inputBound = true;
-    this.canvas.addEventListener("pointermove", () => {
+    this.canvas.addEventListener("pointermove", (e) => {
       if (this.phase === "title" || this.phase === "won" || this.phase === "dead") return;
-      this.pointerToX();
+      this.pointerToX(e);
     });
     this.canvas.addEventListener("pointerup", (e) => {
       this.sfx.unlock();
       if (e.pointerType !== "touch" && e.button !== 0) return;
-      this.pointerToX();
+      this.pointerToX(e);
       if (this.phase === "hammerAim") {
-        const ball = this.pickBall();
+        const ball = this.pickBall(e);
         if (ball) this.smash(ball);
         else {
           this.phase = "playing";

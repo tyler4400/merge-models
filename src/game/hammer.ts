@@ -4,7 +4,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
-import { HAMMER_COUNT, REST } from "./constants";
+import { HAMMER_COUNT } from "./constants";
 import type { Ball } from "./Ball";
 
 export class HammerStock {
@@ -114,5 +114,5 @@ export class ShatterFx {
 
 export function canSmash(ball: Ball): boolean {
   if (ball.held || ball.merging || !ball.aggregate) return false;
-  return ball.settleClock >= REST.holdSec;
+  return ball.dropAge >= 0.3;
 }

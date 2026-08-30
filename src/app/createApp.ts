@@ -17,7 +17,6 @@ import { CAMERA, GRAVITY_Y, VIEW } from "../game/constants";
 import { Game } from "../game/Game";
 import { preloadTokens } from "../game/TokenLayer";
 import { buildContainer } from "../game/physics";
-import { makeSkyBackdrop } from "./skyBackdrop";
 
 export type App = {
   scene: Scene;
@@ -30,8 +29,7 @@ export async function createApp(
   hud: HTMLElement,
 ): Promise<App> {
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.55, 0.80, 0.96, 1);
-  makeSkyBackdrop(scene);
+  scene.clearColor = new Color4(0, 0, 0, 0);
   scene.environmentTexture = makeDayEnv(scene);
   scene.environmentIntensity = 0.9;
 
@@ -76,7 +74,7 @@ export async function createApp(
   rim.diffuse = new Color3(1, 0.85, 0.55);
 
   const rig = buildContainer(scene);
-  rig.failLine.isVisible = true;
+  rig.failLine.isVisible = false;
 
   await preloadTokens();
   const game = new Game(scene, canvas, hud);

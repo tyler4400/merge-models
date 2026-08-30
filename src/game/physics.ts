@@ -85,8 +85,7 @@ export function tuneBallBody(body: PhysicsBody): void {
 
 export function bodySettled(body: PhysicsBody): boolean {
   const v = body.getLinearVelocity();
-  const w = body.getAngularVelocity();
-  return v.length() < REST.linSpeed && w.length() < REST.angSpeed;
+  return Math.hypot(v.x, v.y) < REST.linSpeed;
 }
 
 export function clampDropX(x: number, radius: number): number {
