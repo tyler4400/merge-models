@@ -20,7 +20,7 @@ const INNER_W = 8;
 export const TANK = {
   innerWidth: INNER_W,
   innerHeight: INNER_W * (SCREEN.jarInnerH / SCREEN.jarInnerW),
-  innerDepth: 6.5, // T-800 diameter 5.5 + slack; front/back must not pinch
+  innerDepth: 6.5, // T-800 diameter ~5.0 + slack; front/back must not pinch
   wall: INNER_W * (28 / SCREEN.jarInnerW),
 } as const;
 
