@@ -132,3 +132,49 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 ## 现状
 
 院子和罐子是 `01-courtyard.png` 的 HTML 图，物理墙隐形。圆片画在 2D overlay 上，滚动时图标跟着转。碰撞音是玻璃珠互撞，停稳的堆不再连响。
+
+## 自动部署
+
+推到 `master`，或打任意 tag，会跑 GitHub Actions：在 runner 上构建 nginx 镜像，scp 到 CVM，`docker load` 后 `compose up`。也可在 Actions 页手动 `workflow_dispatch`。不走腾讯云 TCR。
+
+仓库 Secrets：GitHub → 本仓库 Settings → Secrets and variables → Actions。需要这三项：
+
+### `HOST`
+CVM 公网 IP。腾讯云控制台实例详情里复制。
+
+### `SSH_USER`
+CVM 上用来 SSH 登录的 Linux 用户名，**不是**在 GitHub 里生成的。腾讯云 Ubuntu 镜像默认一般是 `ubuntu`，CentOS 常见 `root`。控制台「登录」或你平时 `ssh 用户名@IP` 用的那个。
+
+也可以单独建一个部署用户（在 CVM 上执行）：
+
+```bash
+sudo adduser --disabled-password --gecos "" deploy
+sudo usermod -aG docker deploy
+```
+
+然后 Secret 里 `SSH_USER` 填 `deploy`。
+
+### `RSA_PRIVATE_KEY`
+给 GitHub Actions 专用的 SSH **私钥**全文。名字沿用旧项目 file-upload，密钥算法用 ed25519 即可。**不要**把日常登录电脑的那把私钥贴进去，也**不要**把私钥提交进仓库。
+
+在本机生成一对（空密码）：
+
+```bash
+ssh-keygen -t ed25519 -C "merge-models-github-actions" -f merge-models-deploy -N ""
+```
+
+会得到：
+- `merge-models-deploy` — 私钥。打开全文，粘到 GitHub Secret `RSA_PRIVATE_KEY`（包含 `BEGIN`/`END` 那几行）。
+- `merge-models-deploy.pub` — 公钥。拷到 CVM 上 `SSH_USER` 的授权文件：
+
+```bash
+# 在 CVM 上，以 SSH_USER 登录后
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+echo '这里换成 .pub 文件那一行' >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+本机自测：`ssh -i merge-models-deploy SSH_USER@HOST` 能进再放到 Secret。测完可以把本机那份私钥删掉，只留 GitHub Secret 和 CVM 上的公钥。
+
+CVM 还要：已装 Docker 和 Compose，安全组放行 22 和 80，并 `mkdir -p ~/demo`。容器映射 `80:80`。

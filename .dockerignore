@@ -1,0 +1,17 @@
+.git
+.github
+.agents
+.cursor
+.codex
+node_modules
+dist
+bin
+docs
+screenshots
+cvm-release
+*.md
+.env
+.env.*
+scripts/mm-*.mjs
+src/assets/ui/title-new.png
+src/assets/ui/prune-new.png

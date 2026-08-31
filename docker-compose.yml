@@ -1,0 +1,9 @@
+name: merge-models
+
+services:
+  web:
+    image: merge-models:${IMAGE_TAG}
+    container_name: merge-models
+    ports:
+      - "80:80"
+    restart: unless-stopped
