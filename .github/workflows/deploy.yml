@@ -6,6 +6,10 @@ on:
     tags: ['*']
   workflow_dispatch:
 
+# US runner SCP to China CVM hangs after SSH auth. Publish Release tarball; CVM curls HTTPS.
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -30,20 +34,25 @@ jobs:
           cp -a dist cvm-release/
           cp nginx.conf cvm-release/
           cp docker-compose.cvm.yml cvm-release/docker-compose.yml
+          tar czf cvm-release.tar.gz -C cvm-release .
 
-      - name: 上传到 CVM
-        uses: appleboy/scp-action@v1.0.0
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.RSA_PRIVATE_KEY }}
-          source: cvm-release
-          target: ~/demo/
-          overwrite: true
-          timeout: 30s
-          command_timeout: 3m
+      - name: 发布到 GitHub Release（供 CVM 拉取）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG=cvm-deploy-latest
+          git fetch --tags origin || true
+          git tag -f "$TAG"
+          git push -f origin "refs/tags/$TAG"
+          gh release view "$TAG" >/dev/null 2>&1 && gh release delete "$TAG" --yes || true
+          git push -f origin "refs/tags/$TAG"
+          gh release create "$TAG" cvm-release.tar.gz \
+            --title "CVM deploy bundle" \
+            --notes "Auto-built static bundle for Tencent CVM. Not a product version tag." \
+            --latest=false
 
-      - name: 登录服务器并部署
+      - name: 登录服务器拉取并部署
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.HOST }}
@@ -53,6 +62,13 @@ jobs:
           command_timeout: 5m
           script: |
             set -euo pipefail
-            cd ~/demo/cvm-release
+            mkdir -p ~/demo/cvm-release
+            cd ~/demo
+            curl -fsSL --retry 3 --retry-delay 2 \
+              -o cvm-release.tar.gz \
+              "https://github.com/tyler4400/merge-models/releases/download/cvm-deploy-latest/cvm-release.tar.gz"
+            tar xzf cvm-release.tar.gz -C cvm-release
+            rm -f cvm-release.tar.gz
+            cd cvm-release
             docker compose up -d --force-recreate
             docker image prune -f
