@@ -8,6 +8,8 @@ export type FailSample = {
   dropAge: number;
   topY: number;
   failClock: number;
+  /** Linear velocity Y. Missing is treated as 0 (at rest). */
+  vy?: number;
 };
 
 export function tickFail(
@@ -28,12 +30,14 @@ export function tickFail(
       continue;
     }
 
-    if (b.topY > FAIL_LINE_Y - WARN_SLACK) warn = true;
-
     if (b.dropAge < FAIL_DROP_GRACE) {
       clocks.push(0);
       continue;
     }
+
+    const vy = b.vy ?? 0;
+    const falling = vy < -0.25;
+    if (!falling && b.topY > FAIL_LINE_Y - WARN_SLACK) warn = true;
 
     const next = b.topY > FAIL_LINE_Y ? b.failClock + dt : 0;
     clocks.push(next);

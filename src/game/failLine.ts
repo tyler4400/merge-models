@@ -56,14 +56,23 @@ export class FailLine {
   }
 
   tick(dt: number, balls: readonly Ball[]): { warn: boolean; failed: boolean } {
-    const samples: FailSample[] = balls.map((b) => ({
-      held: b.held,
-      merging: b.merging,
-      hasBody: !!b.aggregate,
-      dropAge: b.dropAge,
-      topY: b.topY(),
-      failClock: b.failClock,
-    }));
+    const samples: FailSample[] = balls.map((b) => {
+      let vy = 0;
+      try {
+        vy = b.body?.getLinearVelocity().y ?? 0;
+      } catch {
+        vy = 0;
+      }
+      return {
+        held: b.held,
+        merging: b.merging,
+        hasBody: !!b.aggregate,
+        dropAge: b.dropAge,
+        topY: b.topY(),
+        failClock: b.failClock,
+        vy,
+      };
+    });
     const { warn, failed, clocks } = tickFail(samples, dt);
     for (let i = 0; i < balls.length; i++) balls[i]!.failClock = clocks[i]!;
 

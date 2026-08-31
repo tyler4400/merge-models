@@ -50,8 +50,9 @@ function simulate(
 
 describe("tickFail", () => {
   it("fails when a ball stays over the line for 2.1s after grace", () => {
-    const r = simulate([sample()], 2.1);
+    const r = simulate([sample({ vy: 0 })], 2.1);
     assert.equal(r.failed, true);
+    assert.equal(r.warn, true);
     assert.ok(r.clocks[0]! >= FAIL_HOLD_SEC);
   });
 
@@ -79,7 +80,14 @@ describe("tickFail", () => {
     const r = simulate([sample({ dropAge: 0.5 })], 0.5);
     assert.equal(r.failed, false);
     assert.equal(r.clocks[0], 0);
-    assert.equal(r.warn, true);
+    assert.equal(r.warn, false);
+  });
+
+  it("does not warn during grace while falling through the line", () => {
+    const r = simulate([sample({ dropAge: 0.5, vy: -5 })], 0.5);
+    assert.equal(r.warn, false);
+    assert.equal(r.failed, false);
+    assert.equal(r.clocks[0], 0);
   });
 
   it("fails after grace then 2.05s over the line", () => {
@@ -90,7 +98,7 @@ describe("tickFail", () => {
 
   it("warns in the slack band without failing", () => {
     const topY = FAIL_LINE_Y - WARN_SLACK / 2;
-    const r = simulate([sample({ topY })], 2.5);
+    const r = simulate([sample({ topY, vy: 0 })], 2.5);
     assert.equal(r.warn, true);
     assert.equal(r.failed, false);
     assert.equal(r.clocks[0], 0);
@@ -108,10 +116,12 @@ describe("tickFail", () => {
     assert.equal(r.clocks[0], 0);
   });
 
-  it("fails after 2.1s over the line even with high implied motion (no vy gate)", () => {
-    // Documents the tilt / bounce bug: velocity is not an input, so sliding cannot prevent a lose.
-    const r = simulate([sample()], 2.1);
+  it("fails after 2.1s over the line even while falling; warn stays off", () => {
+    // Fail clock ignores vy (high pile can still lose). Warn does not fire while falling through.
+    const r = simulate([sample({ vy: -5 })], 2.1);
     assert.equal(r.failed, true);
+    assert.equal(r.warn, false);
+    assert.ok(r.clocks[0]! >= FAIL_HOLD_SEC);
   });
 
   it("fails when only one of two balls is over the line for 2.1s", () => {
