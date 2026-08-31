@@ -39,7 +39,7 @@ export const FAIL_DROP_GRACE = 0.8;
 export const WARN_SLACK = 1.2;
 
 export const DROP = {
-  y: FAIL_LINE_Y - 0.8,
+  y: FAIL_LINE_Y + 0.5,
   moveSpeed: 9.4,
   wallPad: 0.05,
 } as const;

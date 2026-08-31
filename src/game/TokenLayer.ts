@@ -53,10 +53,50 @@ export type TokenDrawOpts = {
   warn?: boolean;
 };
 
+const SNIP_MS = 0.18;
+
+type BurstShard = {
+  a0: number;
+  a1: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rot: number;
+  spin: number;
+  r: number;
+};
+
+type BurstSpark = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  gold: boolean;
+  life: number;
+  maxLife: number;
+};
+
+type Burst = {
+  sx: number;
+  sy: number;
+  r: number;
+  t: number;
+  dur: number;
+  snip: number;
+  img: HTMLImageElement;
+  baseSpin: number;
+  shards: BurstShard[];
+  sparks: BurstSpark[];
+};
+
 export class TokenLayer {
   readonly el: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
   private readonly game: HTMLCanvasElement;
+  private readonly bursts: Burst[] = [];
+  private lastBurstTs = 0;
 
   constructor(gameCanvas: HTMLCanvasElement) {
     this.game = gameCanvas;
@@ -115,6 +155,70 @@ export class TokenLayer {
     return (radius / (2 * VIEW.halfW)) * this.el.width;
   }
 
+  /** Snapshot the token and spawn a prune-snip shatter in canvas pixel space. */
+  burst(ball: Ball): void {
+    const img = images.get(ball.tier);
+    if (!img) return;
+    const p = ball.mesh.getAbsolutePosition();
+    const { sx, sy } = this.worldToScreen(p.x, p.y);
+    const r = Math.max(4, this.radiusPx(ball.radius * ball.mesh.scaling.x));
+    const dur = 0.46 + Math.random() * 0.12;
+    const n = 8 + Math.floor(Math.random() * 5);
+    const weights: number[] = [];
+    for (let i = 0; i < n; i++) weights.push(0.62 + Math.random() * 0.76);
+    const sum = weights.reduce((a, b) => a + b, 0);
+    let ang = Math.random() * Math.PI * 2;
+    const shards: BurstShard[] = [];
+    const baseSpin = ball.spin;
+    for (let i = 0; i < n; i++) {
+      const a0 = ang;
+      ang += (weights[i] / sum) * Math.PI * 2;
+      const a1 = ang;
+      const mid = (a0 + a1) * 0.5 + baseSpin;
+      const speed = r * (2.6 + Math.random() * 2.4);
+      shards.push({
+        a0,
+        a1,
+        x: sx,
+        y: sy,
+        vx: Math.cos(mid) * speed,
+        vy: Math.sin(mid) * speed,
+        rot: 0,
+        spin: (Math.random() - 0.5) * 7.5,
+        r,
+      });
+    }
+    const sparks: BurstSpark[] = [];
+    const ns = 10 + Math.floor(Math.random() * 7);
+    for (let i = 0; i < ns; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = r * (3.2 + Math.random() * 5.4);
+      const life = 0.26 + Math.random() * 0.28;
+      sparks.push({
+        x: sx,
+        y: sy,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - r * 0.55,
+        r: Math.max(1.15, r * (0.032 + Math.random() * 0.05)),
+        gold: Math.random() < 0.55,
+        life,
+        maxLife: life,
+      });
+    }
+    this.bursts.push({
+      sx,
+      sy,
+      r,
+      t: 0,
+      dur,
+      snip: Math.random() * Math.PI,
+      img,
+      baseSpin,
+      shards,
+      sparks,
+    });
+  }
+
   draw(balls: Ball[], opts: TokenDrawOpts = {}): void {
     this.syncSize();
     const ctx = this.ctx;
@@ -143,6 +247,111 @@ export class TokenLayer {
       ctx.drawImage(img, -r, -r, r * 2, r * 2);
       ctx.restore();
     }
+    this.tickBursts();
+    this.paintBursts(ctx);
+  }
+
+  private tickBursts(): void {
+    const now = performance.now();
+    const dt = this.lastBurstTs ? Math.min(0.05, (now - this.lastBurstTs) / 1000) : 0;
+    this.lastBurstTs = now;
+    if (!this.bursts.length) return;
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const b = this.bursts[i];
+      b.t += dt;
+      const g = b.r * 8.4;
+      for (const s of b.shards) {
+        s.vy += g * dt;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.rot += s.spin * dt;
+        s.vx *= 1 - 0.55 * dt;
+      }
+      for (let k = b.sparks.length - 1; k >= 0; k--) {
+        const sp = b.sparks[k];
+        sp.life -= dt;
+        sp.vy += g * 1.15 * dt;
+        sp.x += sp.vx * dt;
+        sp.y += sp.vy * dt;
+        if (sp.life <= 0) b.sparks.splice(k, 1);
+      }
+      if (b.t >= b.dur) this.bursts.splice(i, 1);
+    }
+  }
+
+  private paintBursts(ctx: CanvasRenderingContext2D): void {
+    for (const b of this.bursts) {
+      const u = Math.min(1, b.t / b.dur);
+      const fade = u < 0.52 ? 1 : 1 - (u - 0.52) / 0.48;
+      for (const s of b.shards) {
+        const gap = 0.035;
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.rot + b.baseSpin);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, s.r, s.a0 + gap, s.a1 - gap);
+        ctx.closePath();
+        ctx.clip();
+        ctx.globalAlpha = fade;
+        ctx.drawImage(b.img, -s.r, -s.r, s.r * 2, s.r * 2);
+        ctx.restore();
+      }
+      this.paintSnip(ctx, b);
+      this.paintRing(ctx, b, u);
+      for (const sp of b.sparks) {
+        const a = Math.max(0, sp.life / sp.maxLife);
+        ctx.save();
+        ctx.globalAlpha = a * a;
+        ctx.fillStyle = sp.gold ? "rgba(255, 214, 120, 1)" : "rgba(255, 252, 245, 1)";
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.r * (0.55 + 0.45 * a), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  private paintSnip(ctx: CanvasRenderingContext2D, b: Burst): void {
+    if (b.t >= SNIP_MS) return;
+    const u = b.t / SNIP_MS;
+    const fade = 1 - u;
+    const len = b.r * (0.42 + u * 1.05);
+    const bow = b.r * 0.16 * (1 - u);
+    ctx.save();
+    ctx.translate(b.sx, b.sy);
+    ctx.lineCap = "round";
+    ctx.globalAlpha = fade;
+    const strokes: Array<{ ang: number; color: string; width: number }> = [
+      { ang: b.snip, color: "rgba(255, 252, 242, 0.95)", width: Math.max(1.4, b.r * 0.055) },
+      { ang: b.snip + Math.PI * 0.46, color: "rgba(255, 232, 186, 0.9)", width: Math.max(1.2, b.r * 0.042) },
+    ];
+    for (const st of strokes) {
+      const c = Math.cos(st.ang);
+      const s = Math.sin(st.ang);
+      const nx = -s;
+      const ny = c;
+      ctx.strokeStyle = st.color;
+      ctx.lineWidth = st.width;
+      ctx.beginPath();
+      ctx.moveTo(-c * len, -s * len);
+      ctx.quadraticCurveTo(nx * bow, ny * bow, c * len, s * len);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private paintRing(ctx: CanvasRenderingContext2D, b: Burst, u: number): void {
+    const ringU = Math.min(1, b.t / Math.min(0.42, b.dur));
+    ctx.save();
+    ctx.translate(b.sx, b.sy);
+    ctx.globalAlpha = 0.55 * (1 - ringU) * (1 - u * 0.25);
+    ctx.strokeStyle = "rgba(255, 248, 236, 0.95)";
+    ctx.lineWidth = Math.max(1.1, b.r * 0.04);
+    ctx.beginPath();
+    ctx.arc(0, 0, b.r * (0.72 + ringU * 1.65), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private paintFailLine(ctx: CanvasRenderingContext2D, warn: boolean): void {

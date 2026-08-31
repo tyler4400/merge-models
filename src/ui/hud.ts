@@ -40,7 +40,7 @@ export class Hud {
   constructor(root: HTMLElement, handlers: HudHandlers) {
     this.root = root;
     root.innerHTML = `
-      <div class="brand"><img data-brand-img alt="合成大模型" /></div>
+      <div class="brand"><img data-brand-img alt="训练大模型" /></div>
       <div class="bar">
         <div class="score-block">
           <span class="mark mark-coin" aria-hidden="true"></span>
@@ -70,8 +70,8 @@ export class Hud {
       </div>
       <div class="overlay show" data-title>
         <div class="card">
-          <img class="title-art" data-title-img alt="合成大模型" />
-          <p class="sub">侧视容器里掉玻璃球。两颗同级合成下一级。第一次做出 T-800 即通关，还能继续刷分。</p>
+          <img class="title-art" data-title-img alt="训练大模型" />
+          <p class="sub">训练大模型，同级的会练成下一代。看你能不能练出统一全世界的大模型。</p>
           <div class="actions">
             <button class="cta" data-start type="button">开始</button>
           </div>

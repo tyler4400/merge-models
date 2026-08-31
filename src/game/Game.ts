@@ -307,8 +307,7 @@ export class Game {
   private smash(ball: Ball): void {
     if (!canSmash(ball)) return;
     if (!this.hammers.consume()) return;
-    const at = ball.mesh.getAbsolutePosition().clone();
-    this.shatter.burst(at, ball.radius);
+    this.tokens.burst(ball);
     this.sfx.shatter();
     if (this.pending?.id === ball.id) this.pending = null;
     this.removeBall(ball);
