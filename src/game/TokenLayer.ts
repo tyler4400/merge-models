@@ -1,4 +1,4 @@
-/** 2D token overlay: icon fills the circle, tinted ring from baked PNGs. */
+/** 2D token overlay: icon fills the circle; per-tier colored rings are stroked on top. */
 import { CAMERA, DROP, FAIL_LINE_Y, TANK, VIEW } from "./constants";
 import type { Ball } from "./Ball";
 import tok01 from "../assets/tokens/01.png";
@@ -12,7 +12,7 @@ import tok08 from "../assets/tokens/08.png";
 import tok09 from "../assets/tokens/09.png";
 import tok10 from "../assets/tokens/10.png";
 import courtyardUrl from "../assets/levels/01-courtyard.png";
-import type { TierId } from "./tiers";
+import { getTier, type TierId } from "./tiers";
 
 const TOKEN_URL: Record<TierId, string> = {
   1: tok01,
@@ -54,6 +54,10 @@ export type TokenDrawOpts = {
 };
 
 const SNIP_MS = 0.18;
+const HELD_FILL_ALPHA = 0.5;
+const HELD_RING_ALPHA = 0.88;
+/** Ring thickness as a fraction of token radius (crisp at 390px). */
+const RING_WIDTH_FRAC = 0.095;
 
 type BurstShard = {
   a0: number;
@@ -239,16 +243,56 @@ export class TokenLayer {
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(ball.spin);
-      ctx.globalAlpha = ball.logoAlpha;
+      ctx.globalAlpha = (ball.held ? HELD_FILL_ALPHA : 1) * ball.logoAlpha;
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
       ctx.drawImage(img, -r, -r, r * 2, r * 2);
       ctx.restore();
+      this.strokeTierRing(ctx, sx, sy, r, ball.tier, ball.held, ball.logoAlpha);
     }
     this.tickBursts();
     this.paintBursts(ctx);
+  }
+
+
+  /** Color ring after clip restore so the stroke is not clipped away. */
+  private strokeTierRing(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    r: number,
+    tier: TierId,
+    held: boolean,
+    logoAlpha: number,
+  ): void {
+    const color = getTier(tier).ring;
+    const ringW = Math.max(1.8, r * RING_WIDTH_FRAC);
+    const ringAlpha = (held ? HELD_RING_ALPHA : 1) * logoAlpha;
+    const radius = Math.max(1, r - ringW * 0.22);
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = ringAlpha * 0.38;
+    ctx.lineWidth = ringW * 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = ringAlpha;
+    ctx.lineWidth = ringW;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = ringAlpha * 0.72;
+    ctx.strokeStyle = "rgba(255, 252, 245, 0.62)";
+    ctx.lineWidth = Math.max(1, ringW * 0.22);
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(1, r - ringW * 0.92), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private tickBursts(): void {
