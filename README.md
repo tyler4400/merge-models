@@ -139,7 +139,7 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 ## 自动部署
 
-推到 `master`，或打任意 tag，会跑 GitHub Actions：在 runner 上构建 nginx 镜像，scp 到 CVM，`docker load` 后 `compose up`。也可在 Actions 页手动 `workflow_dispatch`。不走腾讯云 TCR。顶上的徽章跟 `master` 这次 workflow 的状态。
+推到 `master`，或打任意 tag，会跑 GitHub Actions：runner 上 `npm run build`，只 scp `dist` + nginx 配置到 CVM（几兆，不传 docker 镜像），机器上用 `nginx:1.27-alpine` `compose up`。也可在 Actions 页手动 `workflow_dispatch`。不走腾讯云 TCR。顶上的徽章跟 `master` 这次 workflow 的状态。
 
 仓库 Secrets：GitHub → 本仓库 Settings → Secrets and variables → Actions。需要这三项：
 

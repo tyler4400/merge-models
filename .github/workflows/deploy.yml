@@ -13,15 +13,23 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建镜像
-        run: docker build --tag "merge-models:${{ github.sha }}" .
+      - name: 装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-      - name: 打包 compose 与镜像
+      - name: 构建静态站
+        run: |
+          npm ci
+          npm run build
+
+      - name: 打包发布目录
         run: |
           mkdir -p cvm-release
-          docker save "merge-models:${{ github.sha }}" | gzip > cvm-release/merge-models.tar.gz
-          cp docker-compose.yml cvm-release/
-          echo "IMAGE_TAG=${{ github.sha }}" > cvm-release/.env
+          cp -a dist cvm-release/
+          cp nginx.conf cvm-release/
+          cp docker-compose.cvm.yml cvm-release/docker-compose.yml
 
       - name: 上传到 CVM
         uses: appleboy/scp-action@v1.0.0
@@ -31,6 +39,9 @@ jobs:
           key: ${{ secrets.RSA_PRIVATE_KEY }}
           source: cvm-release
           target: ~/demo/
+          overwrite: true
+          timeout: 30s
+          command_timeout: 3m
 
       - name: 登录服务器并部署
         uses: appleboy/ssh-action@v1.2.5
@@ -39,10 +50,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.RSA_PRIVATE_KEY }}
           script_stop: true
+          command_timeout: 5m
           script: |
             set -euo pipefail
             cd ~/demo/cvm-release
-            gzip -dc merge-models.tar.gz | docker load
-            docker compose up -d
-            rm -f merge-models.tar.gz
+            docker compose up -d --force-recreate
             docker image prune -f
