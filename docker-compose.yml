@@ -1,8 +1,7 @@
 name: merge-models
-
 services:
   web:
-    image: merge-models:${IMAGE_TAG}
+    image: ghcr.io/tyler4400/merge-models:${IMAGE_TAG:-latest}
     container_name: merge-models
     ports:
       - "18447:80"

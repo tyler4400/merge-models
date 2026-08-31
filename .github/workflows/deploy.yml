@@ -6,69 +6,62 @@ on:
     tags: ['*']
   workflow_dispatch:
 
-# US runner SCP to China CVM hangs after SSH auth. Publish Release tarball; CVM curls HTTPS.
+concurrency:
+  group: deploy-cvm
+  cancel-in-progress: true
+
 permissions:
-  contents: write
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/tyler4400/merge-models
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 装 Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
         with:
-          node-version: 22
-          cache: npm
-
-      - name: 构建静态站
-        run: |
-          npm ci
-          npm run build
-
-      - name: 打包发布目录
-        run: |
-          mkdir -p cvm-release
-          cp -a dist cvm-release/
-          cp nginx.conf cvm-release/
-          cp docker-compose.cvm.yml cvm-release/docker-compose.yml
-          tar czf cvm-release.tar.gz -C cvm-release .
-
-      - name: 发布到 GitHub Release（供 CVM 拉取）
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG=cvm-deploy-latest
-          git fetch --tags origin || true
-          git tag -f "$TAG"
-          git push -f origin "refs/tags/$TAG"
-          gh release view "$TAG" >/dev/null 2>&1 && gh release delete "$TAG" --yes || true
-          git push -f origin "refs/tags/$TAG"
-          gh release create "$TAG" cvm-release.tar.gz \
-            --title "CVM deploy bundle" \
-            --notes "Auto-built static bundle for Tencent CVM. Not a product version tag." \
-            --latest=false
-
-      - name: 登录服务器拉取并部署
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/tyler4400/merge-models:${{ github.sha }}
+            ghcr.io/tyler4400/merge-models:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: 服务器拉取并启动
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.RSA_PRIVATE_KEY }}
           script_stop: true
-          command_timeout: 5m
+          command_timeout: 10m
           script: |
             set -euo pipefail
-            mkdir -p ~/demo/cvm-release
-            cd ~/demo
-            curl -fsSL --retry 3 --retry-delay 2 \
-              -o cvm-release.tar.gz \
-              "https://github.com/tyler4400/merge-models/releases/download/cvm-deploy-latest/cvm-release.tar.gz"
-            tar xzf cvm-release.tar.gz -C cvm-release
-            rm -f cvm-release.tar.gz
-            cd cvm-release
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            mkdir -p /root/merge-models
+            cat > /root/merge-models/docker-compose.yml <<EOF
+            name: merge-models
+            services:
+              web:
+                image: ghcr.io/tyler4400/merge-models:latest
+                container_name: merge-models
+                ports:
+                  - "18447:80"
+                restart: unless-stopped
+            EOF
+            cd /root/merge-models
+            docker compose pull
             docker compose up -d --force-recreate
+            docker logout ghcr.io || true
             docker image prune -f
