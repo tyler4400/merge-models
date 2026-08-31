@@ -141,7 +141,9 @@ export class Game {
     const dt = Math.min(dtMs / 1000, 0.05);
     this.tilt.tick(dt);
     const live = this.phase === "playing" || this.phase === "hammerAim";
-    this.plugin.setGravity(new Vector3(live ? this.tilt.gx : 0, GRAVITY_Y, 0));
+    const gx = live ? this.tilt.gx : 0;
+    this.plugin.setGravity(new Vector3(gx, GRAVITY_Y, 0));
+    if (gx !== 0) this.wakePile(gx);
     this.shatter.tick(dt);
     this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
@@ -196,6 +198,19 @@ export class Game {
     if (!this.hammers.canUse()) return;
     this.phase = "hammerAim";
     this.hud.setHammers(this.hammers.left, true);
+  }
+
+  /** Havok sleeps settled bodies; world gravity X alone will not start a pile sliding. */
+  private wakePile(gx: number): void {
+    for (const ball of this.balls) {
+      if (ball.held || ball.merging || !ball.body) continue;
+      try {
+        const p = ball.mesh.getAbsolutePosition();
+        ball.body.applyForce(new Vector3(gx * ball.mass, 0, 0), p);
+      } catch {
+        /* body gone */
+      }
+    }
   }
 
   private resetRun(full: boolean): void {
