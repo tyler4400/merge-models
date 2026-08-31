@@ -177,4 +177,4 @@ chmod 600 ~/.ssh/authorized_keys
 
 本机自测：`ssh -i merge-models-deploy SSH_USER@HOST` 能进再放到 Secret。测完可以把本机那份私钥删掉，只留 GitHub Secret 和 CVM 上的公钥。
 
-CVM 还要：已装 Docker 和 Compose，安全组放行 22 和 80，并 `mkdir -p ~/demo`。容器映射 `80:80`。
+CVM 还要：已装 Docker 和 Compose，安全组放行 22 和 **18447**（不要开 80），并 `mkdir -p ~/demo`。容器映射 `18447:80`。打开 `http://HOST:18447`。
