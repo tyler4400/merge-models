@@ -8,7 +8,7 @@ import { Sfx } from "../audio/Sfx";
 import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
 import { TokenLayer } from "./TokenLayer";
-import { DROP, MERGE_POP, REST, VIEW } from "./constants";
+import { DROP, GRAVITY_Y, MERGE_POP, REST, VIEW } from "./constants";
 import { FailLine } from "./failLine";
 import { HammerStock, ShatterFx, canSmash } from "./hammer";
 import { planMerge } from "./merge";
@@ -16,6 +16,7 @@ import { bodySettled, clampDropX, keepInLane } from "./physics";
 import { firstT800Bonus, mergePoints, t800PairBonus } from "./scoring";
 import { createSpawnQueue, type SpawnQueue } from "./spawn";
 import { getTier, type TierId } from "./tiers";
+import { TiltSensor } from "./tilt";
 
 export type Phase = "title" | "playing" | "won" | "dead" | "hammerAim";
 
@@ -55,6 +56,7 @@ export class Game {
   private freeze = false;
   private inputBound = false;
   private lastPointer: PointerEvent | null = null;
+  readonly tilt = new TiltSensor();
 
   constructor(scene: Scene, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
     this.scene = scene;
@@ -114,6 +116,7 @@ export class Game {
 
   start(): void {
     this.sfx.unlock();
+    this.tilt.startFromGesture();
     this.resetRun(true);
     this.phase = "playing";
     this.hud.hideTitle();
@@ -127,6 +130,7 @@ export class Game {
 
   continueScore(): void {
     this.sfx.unlock();
+    this.tilt.startFromGesture();
     this.phase = "playing";
     this.freeze = false;
     this.hud.hideResult();
@@ -135,6 +139,9 @@ export class Game {
 
   tick(dtMs: number): void {
     const dt = Math.min(dtMs / 1000, 0.05);
+    this.tilt.tick(dt);
+    const live = this.phase === "playing" || this.phase === "hammerAim";
+    this.plugin.setGravity(new Vector3(live ? this.tilt.gx : 0, GRAVITY_Y, 0));
     this.shatter.tick(dt);
     this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
@@ -179,6 +186,7 @@ export class Game {
 
   toggleHammer(): void {
     this.sfx.unlock();
+    this.tilt.startFromGesture();
     if (this.phase === "hammerAim") {
       this.phase = "playing";
       this.hud.setHammers(this.hammers.left, false);
@@ -279,6 +287,7 @@ export class Game {
 
   private tryDrop(): void {
     if (!this.canDrop() || !this.held) return;
+    this.syncHeld();
     const ball = this.held;
     ball.held = false;
     ball.mesh.visibility = 1;
@@ -332,15 +341,35 @@ export class Game {
     return this.tokens.hitTestCss(e.clientX, e.clientY, this.balls);
   }
 
+  private isHudChrome(e: Event): boolean {
+    const t = e.target;
+    if (!(t instanceof Element)) return false;
+    return !!t.closest("button, .overlay, a, input");
+  }
+
   private bindInput(): void {
     if (this.inputBound) return;
     this.inputBound = true;
-    this.canvas.addEventListener("pointermove", (e) => {
+    // #game is opacity:0; some mobile browsers skip events on it. Bind once on #stage.
+    const stage = this.canvas.parentElement ?? this.canvas;
+
+    const onPointerMove = (e: PointerEvent): void => {
       if (this.phase === "title" || this.phase === "won" || this.phase === "dead") return;
       this.pointerToX(e);
-    });
-    this.canvas.addEventListener("pointerup", (e) => {
+      if (this.phase === "playing" || this.phase === "hammerAim") this.syncHeld();
+    };
+    const onPointerDown = (e: PointerEvent): void => {
       this.sfx.unlock();
+      this.tilt.startFromGesture();
+      if (this.isHudChrome(e)) return;
+      if (e.pointerType !== "touch" && e.button !== 0) return;
+      this.pointerToX(e);
+      if (this.phase === "playing" || this.phase === "hammerAim") this.syncHeld();
+    };
+    const onPointerUp = (e: PointerEvent): void => {
+      this.sfx.unlock();
+      this.tilt.startFromGesture();
+      if (this.isHudChrome(e)) return;
       if (e.pointerType !== "touch" && e.button !== 0) return;
       this.pointerToX(e);
       if (this.phase === "hammerAim") {
@@ -353,8 +382,12 @@ export class Game {
         return;
       }
       if (this.phase === "playing") this.tryDrop();
-    });
-    this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    };
+
+    stage.addEventListener("pointermove", onPointerMove);
+    stage.addEventListener("pointerdown", onPointerDown);
+    stage.addEventListener("pointerup", onPointerUp);
+    stage.addEventListener("contextmenu", (e) => e.preventDefault());
     window.addEventListener("keydown", (e) => {
       this.sfx.unlock();
       if (e.code === "ArrowLeft" || e.code === "KeyA") {
