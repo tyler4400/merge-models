@@ -452,9 +452,30 @@ export class TokenLayer {
     return this.pickAtWorld(wx, wy, balls);
   }
 
-  hitTestCss(clientX: number, clientY: number, balls: Ball[]): Ball | null {
-    const { x, y } = this.cssToWorld(clientX, clientY);
-    return this.pickAtWorld(x, y, balls);
+  /**
+   * Screen-space pick so a tap on a drawn token hits it.
+   * slopCss is extra CSS pixels around the disc (finger / automation jitter).
+   */
+  hitTestCss(clientX: number, clientY: number, balls: Ball[], slopCss = 16): Ball | null {
+    const rect = this.el.getBoundingClientRect();
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
+    const px = ((clientX - rect.left) / w) * this.el.width;
+    const py = ((clientY - rect.top) / h) * this.el.height;
+    const slop = slopCss * (this.el.width / w);
+    let best: Ball | null = null;
+    let bestD = Infinity;
+    for (const ball of balls) {
+      const p = ball.mesh.getAbsolutePosition();
+      const { sx, sy } = this.worldToScreen(p.x, p.y);
+      const r = this.radiusPx(ball.radius * Math.max(0.15, ball.mesh.scaling.x));
+      const d = Math.hypot(px - sx, py - sy);
+      if (d <= r + slop && d < bestD) {
+        best = ball;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   private pickAtWorld(wx: number, wy: number, balls: Ball[]): Ball | null {

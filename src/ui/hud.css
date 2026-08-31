@@ -293,6 +293,7 @@
 #hud .overlay {
   position: absolute;
   inset: 0;
+  z-index: 6;
   display: none;
   align-items: center;
   justify-content: center;
@@ -408,6 +409,7 @@
   border-radius: 999px;
   display: none;
   box-shadow: 0 6px 14px rgba(70, 140, 200, 0.18);
+  pointer-events: none;
 }
 
 #hud .aim-hint.show {

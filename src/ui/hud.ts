@@ -36,6 +36,7 @@ export class Hud {
   private hammerBtn: HTMLButtonElement;
   private hammerCount: HTMLElement;
   private failMark: HTMLElement;
+  private toastTimer: number | null = null;
 
   constructor(root: HTMLElement, handlers: HudHandlers) {
     this.root = root;
@@ -160,7 +161,11 @@ export class Hud {
   toast(name: string): void {
     this.toastEl.textContent = name;
     this.toastEl.classList.add("show");
-    window.setTimeout(() => this.toastEl.classList.remove("show"), 900);
+    if (this.toastTimer != null) window.clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => {
+      this.toastEl.classList.remove("show");
+      this.toastTimer = null;
+    }, 900);
   }
 
   hideTitle(): void {

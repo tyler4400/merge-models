@@ -351,8 +351,13 @@ export class Game {
     });
   }
 
-  private pickBall(e: PointerEvent): Ball | null {
-    return this.tokens.hitTestCss(e.clientX, e.clientY, this.balls);
+  private pickBall(e: PointerEvent, slop = 16): Ball | null {
+    return this.tokens.hitTestCss(e.clientX, e.clientY, this.balls, slop);
+  }
+
+  private pickSmash(e: PointerEvent): Ball | null {
+    const live = this.balls.filter((b) => canSmash(b));
+    return this.tokens.hitTestCss(e.clientX, e.clientY, live, 24);
   }
 
   private isHudChrome(e: Event): boolean {
@@ -387,12 +392,15 @@ export class Game {
       if (e.pointerType !== "touch" && e.button !== 0) return;
       this.pointerToX(e);
       if (this.phase === "hammerAim") {
-        const ball = this.pickBall(e);
-        if (ball) this.smash(ball);
-        else {
-          this.phase = "playing";
-          this.hud.setHammers(this.hammers.left, false);
+        const smash = this.pickSmash(e);
+        if (smash) {
+          this.smash(smash);
+          return;
         }
+        // Tap landed on a ball we cannot smash yet — keep aiming.
+        if (this.pickBall(e, 24)) return;
+        this.phase = "playing";
+        this.hud.setHammers(this.hammers.left, false);
         return;
       }
       if (this.phase === "playing") this.tryDrop();
@@ -507,6 +515,9 @@ export class Game {
     this.score += firstT800Bonus(this.elapsed);
     this.hud.setScore(this.score);
     this.sfx.win();
+    this.sfx.setAlarm(false);
+    this.hud.setWarn(false);
+    this.hud.setHammers(this.hammers.left, false);
     this.phase = "won";
     window.setTimeout(() => {
       if (this.phase === "won") this.hud.showWin(this.score, this.elapsed, this.hammers.left);
@@ -517,6 +528,8 @@ export class Game {
     this.phase = "dead";
     this.freeze = true;
     this.sfx.setAlarm(false);
+    this.hud.setWarn(false);
+    this.hud.setHammers(this.hammers.left, false);
     this.hud.showLose(this.score, this.elapsed, this.hammers.left);
   }
 
