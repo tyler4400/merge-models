@@ -1,6 +1,10 @@
 # 训练大模型
 
+[![自动部署](https://github.com/tyler4400/merge-models/actions/workflows/deploy.yml/badge.svg?branch=master)](https://github.com/tyler4400/merge-models/actions/workflows/deploy.yml)
+
 侧视容器里往下掉玻璃球，两颗同级合成下一级。第一次做出 **T-800** 即通关，之后可以继续刷分。休闲局，不是刷分肝游。
+
+> 训练大模型，同级的会练成下一代。看你能不能练出统一全世界的大模型。
 
 <p align="center">
   <img src="docs/shots/play.jpg" alt="对局：院子罐子里的合成圆片" width="280">
@@ -57,11 +61,11 @@ Havok wasm 放在 `public/HavokPhysics.wasm`，运行时用 locateFile 加载 `/
 ## 怎么玩
 
 1. 标题页点「开始」。
-2. 左右移动手持球，松手 / 点击 / 空格投放。只能投 1-4 级。
+2. 左右移动手持球，松手 / 点击 / 空格投放。只能投 1-4 级。可快速连点，不必等上一颗停稳。
 3. 两颗同级碰到变成下一级，中央 toast 显示名字。
 4. 第一次做出 T-800 即通关结算。可选「继续刷分」或「再来一局」。
-5. 球顶越过警戒线约 2 秒即失败（刚落下穿过红线不算）。
-6. 点锤子，再点一颗已落地的球砸碎（全局限 3 次）。点空处取消。
+5. 堆住的球顶越过警戒线约 2 秒即失败。刚落下 0.8 秒内、以及还在下落穿过红线的，不亮警告。
+6. 点底栏剪枝剪，再点一颗已落地的球砸碎（全局限 3 次）。点空处取消；点到还不能砸的球继续瞄准。
 
 桌面：A / D 或方向键或鼠标移动；点击 / 空格投放。
 手机：手指拖动手持球，松手投放。画布禁止滚动和缩放。
@@ -83,14 +87,14 @@ src/
     spawn.ts              下一颗队列，仅 1-4 级，权重 35/30/20/15
     physics.ts            Havok 隐形盒墙；罐子是关卡贴图
     merge.ts              同级接触 → 下一级上弹；两颗 T-800 消失
-    hammer.ts             3 锤子：瞄准 → 点已落地的球 → 碎裂 VFX
-    failLine.ts           靠近变红 + 警报；静止越线约 2s 失败
+    hammer.ts             3 把剪枝剪：瞄准 → 点已落地的球 → 碎裂 VFX
+    failLine.ts           堆住靠近变红 + 警报；越线约 2s 失败
     TokenLayer.ts         2D 圆片层：图标铺满 + 分阶色圈，叠在院子图上
   ui/                     HTML/CSS 覆盖层：分数、计时、下一颗、锤子、toast、胜负
   audio/Sfx.ts            Web Audio 程序音：碰撞、合成、碎裂、警报、胜利
   assets/icons/           01-doubao.png … 10-t800.png
   assets/levels/          01-courtyard.png（院子+画上的玻璃缸）
-  assets/ui/              title.png、hammer.png
+  assets/ui/              title.png（立体字+图标圆片）、hammer.png（剪枝剪，×3 不烤进图）
 ```
 
 玩法细则只放在 `docs/BRIEF.md`，避免和代码各说各话。
@@ -119,13 +123,13 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 - index.html：viewport-fit=cover，禁止用户缩放。
 - canvas：touch-action none，overscroll-behavior none。
-- HUD 按 390px 宽排：顶栏分数 / 时间 / 下一颗，底栏一只锤子 ×3。
-- 锤子按钮足够大，方便拇指。
+- HUD 按 390px 宽排：顶栏分数 / 时间 / 下一颗，底栏一把剪枝剪 ×3。
+- 剪枝剪按钮足够大，方便拇指。
 - 覆盖层用大号按钮和对比度足够的字。
 
 ## 视觉
 
-日光院子，不是夜间霓虹。白 / 米色圆角条、气泡立体字、软阴影。罐子是淡 U 玻璃缸（木底座、没有盖）。球是 2D 圆片：图标铺满，外圈分阶色。标题「合成大模型」。
+日光院子，不是夜间霓虹。白 / 米色圆角条、气泡立体字、软阴影。禁止厚黑描边和深色硬框。罐子是淡 U 玻璃缸（木底座、没有盖）。球是 2D 圆片：图标铺满，外圈分阶色；预览球半透明。标题「训练大模型」（立体字 + 图标圆片，无树叶）。
 
 截图：`docs/shots/play.jpg`、`docs/shots/title.jpg`。
 
@@ -135,7 +139,7 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 ## 自动部署
 
-推到 `master`，或打任意 tag，会跑 GitHub Actions：在 runner 上构建 nginx 镜像，scp 到 CVM，`docker load` 后 `compose up`。也可在 Actions 页手动 `workflow_dispatch`。不走腾讯云 TCR。
+推到 `master`，或打任意 tag，会跑 GitHub Actions：在 runner 上构建 nginx 镜像，scp 到 CVM，`docker load` 后 `compose up`。也可在 Actions 页手动 `workflow_dispatch`。不走腾讯云 TCR。顶上的徽章跟 `master` 这次 workflow 的状态。
 
 仓库 Secrets：GitHub → 本仓库 Settings → Secrets and variables → Actions。需要这三项：
 
