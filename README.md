@@ -141,7 +141,7 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 ### Cloudflare Workers 静态资源配置
 
-已添加 `wrangler.jsonc`（含逐行中文说明），使用 Wrangler 4.152.0 将 `dist/` 作为静态资源目录，目标域名为 `merge.tyler4400.com`。当前完成的是配置准备，本次没有登录、上传或绑定域名。后续实际发布和域名访问验证仍待执行。
+已添加 `wrangler.jsonc`（含逐行中文说明），使用 Wrangler 4.152.0 将 `dist/` 作为静态资源目录，目标域名为 `merge-models.tyler4400.com`。当前完成的是配置准备，本次没有登录、上传或绑定域名。后续实际发布和域名访问验证仍待执行。
 
 本地检查顺序：`npm ci` → `npm run build` → `npx wrangler deploy --dry-run` → `npm test`。dry-run 只做部署预演，不发布。`npm run deploy` 会实际发布，且不会自动构建；准备好 Cloudflare 账户及域名权限后，应先运行 `npm run build` 再使用它。
 

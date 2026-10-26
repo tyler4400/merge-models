@@ -93,10 +93,10 @@
     // 开始一条自定义域名配置；同一列表将来可以容纳其它域名。
     {
       // 自定义域名填写完整主机名，不带 https://、路径或 /*；正式部署时须有该域名权限。
-      "pattern": "merge.tyler4400.com",
+      "pattern": "merge-models.tyler4400.com",
       // true 表示由此 Worker 作为域名源站提供内容，而不是匹配现有源站上的路径路由。
       "custom_domain": true
-    // 结束 merge.tyler4400.com 的域名配置。
+    // 结束 merge-models.tyler4400.com 的域名配置。
     }
   // 结束 routes 列表；这是最后一个启用的顶层字段，不加逗号。
   ]
