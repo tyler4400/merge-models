@@ -139,6 +139,21 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 ## 自动部署
 
+### Cloudflare Workers 静态资源配置
+
+已添加 `wrangler.jsonc`（含逐行中文说明），使用 Wrangler 4.152.0 将 `dist/` 作为静态资源目录，目标域名为 `merge.tyler4400.com`。当前完成的是配置准备，本次没有登录、上传或绑定域名。后续实际发布和域名访问验证仍待执行。
+
+本地检查顺序：`npm ci` → `npm run build` → `npx wrangler deploy --dry-run` → `npm test`。dry-run 只做部署预演，不发布。`npm run deploy` 会实际发布，且不会自动构建；准备好 Cloudflare 账户及域名权限后，应先运行 `npm run build` 再使用它。
+
+| 部署资源 | 作用与缓存 |
+|---|---|
+| `wrangler.jsonc` | 固定兼容日期 `2026-10-01`，声明静态资源目录与自定义域名；其它字段为未启用的学习示例 |
+| `public/_headers` → `dist/_headers` | Cloudflare 读取的响应头规则；保持手机传感器策略与 Vite 开发环境一致 |
+| `dist/assets/*` | 当前构建文件均带内容 hash，浏览器缓存一年并启用 immutable；以后不要混入无 hash 素材 |
+| `dist/HavokPhysics.wasm` | 无 hash 的固定文件名，缓存一天，便于 Havok 升级后更新 |
+
+### 现有容器部署
+
 推 `master`、打任意 tag，或在 Actions 页点 `workflow_dispatch`，会构建镜像并推到 `ghcr.io/tyler4400/merge-models`（`:sha` 与 `:latest`），再 SSH 到 CVM 执行 `docker compose pull` 和 `up`。SSH 只负责让机器去拉镜像，不上传文件。顶上的徽章跟 `master` 这次 workflow 的状态。
 
 仓库 Secrets：`HOST`（CVM 公网 IP）、`SSH_USER`、`RSA_PRIVATE_KEY`。把 CVM 上对应用户的 SSH **私钥**全文放进 `RSA_PRIVATE_KEY`，对应公钥写在该用户 `~/.ssh/authorized_keys`。
