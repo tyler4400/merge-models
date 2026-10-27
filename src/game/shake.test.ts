@@ -106,10 +106,10 @@ describe("ShakeDetector", () => {
     }
   });
 
-  it("无效数据和长断流不沿用旧峰，非递增时间不污染状态", () => {
+  it("无效数据和长断流不沿用旧峰，时钟回退重建窗口", () => {
     const detector = new ShakeDetector();
     detector.sample(linear(30), 0);
-    assert.equal(detector.sample(linear(-30), -1).peak, false);
+    assert.equal(detector.sample(linear(-30), -1).peak, true);
     assert.equal(detector.sample(linear(-30), NaN).peak, false);
     detector.sample(linear(NaN), 10);
     detector.sample(linear(-30), 20);
@@ -146,7 +146,8 @@ describe("摇晃方向与冲量", () => {
     let now = 0;
     t.mock.method(performance, "now", () => now);
     let push: (event: MotionSample) => void = () => {};
-    const tilt = { subscribeMotion(callback: typeof push) { push = callback; return () => {}; } };
+    const tilt = { subscribeMotion(callback: typeof push) { push = callback; return () => {}; },
+      subscribeReset() { return () => {}; }, recordError(error: unknown) { throw error; } };
     const calls: Array<[number, number | null]> = [];
     const sensor = new ShakeSensor(tilt as unknown as TiltSensor, {
       enabled: () => true, onPeak: () => {},
@@ -208,5 +209,70 @@ describe("摇晃方向与冲量", () => {
       const first = jitterShakePulse(createShakePulse(0.8, sign), () => 0.5);
       assert.deepEqual(sloshPulse(first), { x: -first.x * SHAKE.sloshRatio, y: 0, z: 0 });
     }
+  });
+});
+
+describe("长期运行与异常恢复", () => {
+  it("10分钟60Hz噪声+每6秒真摇晃，跨无效数据/高通/时钟回退/30秒断流均不漏触", () => {
+    const detector = new ShakeDetector();
+    let seed = 0x12345678;
+    const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
+    let offset = 0;
+    let triggers = 0;
+    for (let frame = 0; frame < 60 * 60 * 10; frame++) {
+      const cycle = Math.floor(frame / 360);
+      const pos = frame % 360;
+      if (frame === 18001) offset -= 300_000;
+      if (frame === 25201) offset += 30_000;
+      const now = frame * 1000 / 60 + offset;
+      const wave = pos >= 180 && pos < 198;
+      const x = wave ? (pos < 186 || pos >= 192 ? 30 : -30) : (random() - 0.5) * 0.6;
+      let sample = cycle % 2 ? gravity(x) : linear(x);
+      if (frame === 6001) sample = { acceleration: null, accelerationIncludingGravity: null };
+      if (frame === 9601) sample = linear(NaN);
+      const result = detector.sample(sample, now);
+      if (result.intensity !== null) {
+        assert.equal(wave, true, `安静噪声误触 frame=${frame}`);
+        triggers++;
+      }
+      if (pos === 359) assert.equal(triggers, cycle + 1, `第${cycle + 1}次摇晃漏触/重复`);
+    }
+    assert.equal(triggers, 100);
+    assert.equal(detector.getDiagnostics().triggerCount, 100);
+  });
+
+  it("从大时钟回退立即重建窗口并清异常冷却，resetAll后无需等待冷却", () => {
+    const detector = new ShakeDetector();
+    assert.equal(shake(detector, 600_000), 0.5);
+    assert.equal(shake(detector, 0), 0.5);
+    detector.resetAll();
+    assert.equal(shake(detector, 201), 0.5);
+    detector.resetMotion();
+    assert.equal(shake(detector, 402), null);
+    assert.equal(detector.getDiagnostics(603).triggerCount, 3);
+  });
+
+  it("有限极值运算溢出不污染高通，后续普通高通摇晃仍有效", () => {
+    const detector = new ShakeDetector();
+    detector.sample(gravity(-Number.MAX_VALUE), 0);
+    detector.sample(gravity(Number.MAX_VALUE), 20);
+    assert.equal(detector.getDiagnostics(20).source, "none");
+    detector.sample(gravity(0), 40);
+    detector.sample(gravity(30), 60);
+    detector.sample(gravity(-30), 80);
+    assert.notEqual(detector.sample(gravity(30), 100).intensity, null);
+    assert.ok(Number.isFinite(detector.getDiagnostics(100).magnitude));
+  });
+
+  it("诊断窗口随时间过期，返回只读快照", () => {
+    const detector = new ShakeDetector();
+    detector.sample(linear(30), 0);
+    detector.sample(linear(-30), 100);
+    const before = detector.getDiagnostics(100);
+    assert.equal(before.peaks, 2); assert.equal(before.reversals, 1);
+    assert.equal(Object.isFrozen(before), true);
+    const after = detector.getDiagnostics(601);
+    assert.equal(after.peaks, 0); assert.equal(after.reversals, 0);
+    assert.equal(before.peaks, 2);
   });
 });

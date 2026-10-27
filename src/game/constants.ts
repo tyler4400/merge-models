@@ -54,9 +54,9 @@ export const REST = {
 
 export const PHYS = {
   ballRestitution: 0.28,
-  ballFriction: 0.2,
+  ballFriction: 0.3,
   wallRestitution: 0.06,
-  wallFriction: 0.2,
+  wallFriction: 0.3,
   linearDamping: 0.1,
   angularDamping: 0.08,
   zSpring: 52,
@@ -74,6 +74,12 @@ export const TIME_BONUS_PER_SEC = 8;
 export const T800_PAIR_BONUS = 5000;
 
 export const GRAVITY_Y = -24;
+
+export const MOTION = {
+  staleMs: 1500, // 无 devicemotion 时重挂监听，并启用通用传感器回退
+  reattachMinMs: 2000, // watchdog / focus 重挂最小间隔
+  focusStaleMs: 1000, // focus 仅在事件静默超过此值时尝试恢复
+} as const;
 
 export const TILT = {
   deadzoneDeg: 3, // 小于此角度视为竖直

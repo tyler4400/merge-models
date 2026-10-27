@@ -94,7 +94,15 @@ export class Game {
       onShake: (intensity, dominantSign) => this.applyShake(intensity, dominantSign),
     });
 
-    scene.onDisposeObservable.add(() => { this.clearShakeEffects(); this.shake.dispose(); });
+    const unsubscribeReset = this.tilt.subscribeReset((resumed) => {
+      if (resumed) this.clearShakeEffects();
+    });
+    scene.onDisposeObservable.add(() => {
+      unsubscribeReset();
+      this.clearShakeEffects();
+      this.shake.dispose();
+      this.tilt.dispose();
+    });
 
     this.plugin.onCollisionObservable.add((ev) => {
       const a = this.bodyMap.get(ev.collider);
@@ -155,6 +163,11 @@ export class Game {
     this.freeze = false;
     this.hud.hideResult();
     if (!this.held) this.spawnHeld();
+  }
+
+  getDiagnostics() {
+    return Object.freeze({ phase: this.phase, shakeFailPause: this.shakeFailPause,
+      tilt: this.tilt.getDiagnostics(), shake: this.shake.detector.getDiagnostics() });
   }
 
   tick(dtMs: number): void {
@@ -242,6 +255,7 @@ export class Game {
 
   private applyShake(intensity: number, dominantSign: number | null = null): void {
     if (this.phase !== "playing" && this.phase !== "hammerAim") return;
+    this.hud.toast("晃起来啦！"); // 物理/音效异常也不能吞掉识别成功的反馈。
     this.tilt.freeze(SHAKE.tiltFreezeSec);
     this.shakeFailPause = SHAKE.failPauseSec;
     this.syncActivation(true);
@@ -259,7 +273,6 @@ export class Game {
     this.slosh = SHAKE.sloshEnabled ? { remaining: SHAKE.sloshDelayMs / 1000, pulses } : null;
     try { navigator.vibrate?.([...SHAKE.vibrateMs]); } catch { /* iOS 等不支持震动时跳过。 */ }
     this.sfx.collide(pulse.y);
-    this.hud.toast("晃起来啦！");
   }
 
   private stepShakeEffects(dt: number): void {

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { SHAKE, TILT } from "./constants.ts";
+import { MOTION, SHAKE, TILT } from "./constants.ts";
 import { TiltSensor } from "./tilt.ts";
 import { ShakeSensor } from "./shake.ts";
 
 let now = 0;
 let screenDeg = 0;
 let events: EventTarget;
+let docEvents: EventTarget;
+let visibility: string;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 function globalValue(name: string, value: unknown): void {
   if (!originals.has(name)) originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
@@ -32,6 +34,10 @@ beforeEach(() => {
   now = 0;
   screenDeg = 0;
   events = new EventTarget();
+  docEvents = new EventTarget();
+  visibility = "visible";
+  globalValue("document", Object.assign(docEvents, { onfreeze: null, onresume: null }));
+  Object.defineProperty(document, "visibilityState", { get: () => visibility });
   globalValue("window", Object.assign(events, {
     screen: { orientation: { get angle() { return screenDeg; } } },
     orientation: 0,
@@ -215,28 +221,45 @@ describe("TiltSensor", () => {
     });
   }
 
-  it("通用 Accelerometer 回退保留，运动数据到来后优先", () => {
-    let reading = () => {};
-    let error = () => {};
-    globalValue("Accelerometer", class {
+  it("通用 Accelerometer 只在静默后启动，事件恢复/隐藏时停止释放", () => {
+    let starts = 0;
+    let stops = 0;
+    const sensors: EventTarget[] = [];
+    globalValue("Accelerometer", class extends EventTarget {
       x = -9.81;
       y = 0;
-      start() {}
-      addEventListener(type: string, fn: () => void) {
-        if (type === "reading") reading = fn;
-        else error = fn;
-      }
+      constructor() { super(); sensors.push(this); }
+      start() { starts++; }
+      stop() { stops++; }
     });
     const sensor = new TiltSensor();
-    reading();
+    sensor.tick(0);
+    assert.equal(starts, 0);
+    now = MOTION.staleMs;
+    sensor.tick(0);
+    assert.equal(starts, 0);
+    now++;
+    sensor.tick(0);
+    assert.equal(starts, 1);
+    sensors[0].dispatchEvent(new Event("reading"));
     angle(sensor, 45);
     motion(0, 9.81);
-    reading();
+    assert.equal(stops, 1);
+    assert.equal(sensor.getDiagnostics().genericActive, false);
+    sensors[0].dispatchEvent(new Event("reading"));
     angle(sensor, 0);
-    now = TILT.sourceStaleMs + 1;
-    error();
+    now += MOTION.staleMs + 1;
+    sensor.tick(0);
+    assert.equal(starts, 2);
+    visibility = "hidden"; docEvents.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(stops, 2);
+    visibility = "visible"; docEvents.dispatchEvent(new Event("visibilitychange"));
+    sensor.tick(0);
+    sensors[2].dispatchEvent(new Event("error"));
+    assert.match(sensor.getDiagnostics().lastError!.message, /Accelerometer error/);
     send("deviceorientation", { beta: 45, gamma: -90 });
     angle(sensor, -45);
+    sensor.dispose();
   });
 
   it("iOS 手势同步申请两类权限，使用相反运动符号", async () => {
@@ -265,5 +288,80 @@ describe("TiltSensor", () => {
     await new Promise((resolve) => setTimeout(resolve, TILT.iosPermissionMs + 30));
     motion(9.81, 0);
     angle(sensor, 45);
+  });
+});
+
+describe("传感器恢复集成", () => {
+  it("隐藏清样本、恢复清冷却/冻结；继续接收事件且生命周期不重申请iOS权限", async () => {
+    globalValue("navigator", { userAgent: "iPhone" });
+    let requests = 0;
+    const permission = { requestPermission: async () => { requests++; return "granted"; } };
+    globalValue("DeviceMotionEvent", permission); globalValue("DeviceOrientationEvent", permission);
+    const tilt = new TiltSensor();
+    let shakes = 0;
+    const shake = new ShakeSensor(tilt, {
+      enabled: () => true, onPeak: () => tilt.freeze(0.8), onShake: () => { shakes++; },
+    });
+    tilt.startFromGesture(); tilt.startFromGesture();
+    await new Promise((resolve) => setImmediate(resolve));
+    const burst = () => {
+      for (const x of [26, -26, 26]) {
+        now += 20;
+        send("devicemotion", { acceleration: { x, y: 0, z: 0 }, accelerationIncludingGravity: null });
+      }
+    };
+    burst(); assert.equal(shakes, 1);
+    visibility = "hidden"; docEvents.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(shake.detector.getDiagnostics().peaks, 0);
+    burst(); assert.equal(shakes, 1);
+    visibility = "visible"; docEvents.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(tilt.getDiagnostics().frozenSec, 0);
+    assert.equal(shake.detector.getDiagnostics().cooldownSec, 0);
+    burst(); assert.equal(shakes, 2);
+    send("pageshow", { persisted: true }); docEvents.dispatchEvent(new Event("resume"));
+    assert.equal(requests, 2);
+    shake.dispose(); tilt.dispose();
+  });
+
+  it("onPeak/onShake异常隔离，其他订阅者和后续摇晃继续工作", () => {
+    const tilt = new TiltSensor();
+    let calls = 0;
+    let other = 0;
+    const shake = new ShakeSensor(tilt, {
+      enabled: () => true,
+      onPeak: () => { throw new Error("onPeak broken"); },
+      onShake: () => { calls++; if (calls === 1) throw new Error("applyShake broken"); },
+    });
+    tilt.subscribeMotion(() => { throw new Error("subscriber broken"); });
+    tilt.subscribeMotion(() => { other++; });
+    const burst = (at: number) => {
+      for (const [i, x] of [26, -26, 26].entries()) {
+        now = at + i * 100;
+        send("devicemotion", { acceleration: { x, y: 0, z: 0 }, accelerationIncludingGravity: { x: 0, y: 9.81, z: 0 } });
+      }
+    };
+    burst(0); burst(3000);
+    assert.equal(calls, 2); assert.equal(other, 6);
+    assert.equal(tilt.getDiagnostics().lastMotionAgoMs, 0);
+    assert.match(tilt.getDiagnostics().lastError!.message, /subscriber broken/);
+    shake.dispose(); tilt.dispose();
+  });
+
+  it("各游戏阶段切回playing/hammerAim后enabled动态恢复", () => {
+    const tilt = new TiltSensor();
+    let phase = "title";
+    let calls = 0;
+    const shake = new ShakeSensor(tilt, {
+      enabled: () => phase === "playing" || phase === "hammerAim",
+      onPeak: () => {}, onShake: () => { calls++; },
+    });
+    for (const next of ["title", "playing", "won", "playing", "hammerAim", "playing", "dead", "playing"]) {
+      phase = next;
+      now += 3000;
+      const before = calls;
+      shake.simulate(0.8);
+      assert.equal(calls - before, next === "playing" || next === "hammerAim" ? 1 : 0);
+    }
+    shake.dispose(); tilt.dispose();
   });
 });

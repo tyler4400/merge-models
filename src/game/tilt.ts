@@ -1,5 +1,6 @@
 /** 手机倾角：先统一重力方向，再投影到屏幕坐标。 */
-import { clamp, TILT } from "./constants.ts";
+import { clamp, MOTION, TILT } from "./constants.ts";
+import { MotionLifecycle } from "./motionLifecycle.ts";
 
 const IOS_PERM_MS = TILT.iosPermissionMs;
 
@@ -11,7 +12,9 @@ type GenericAccel = {
   x: number | null;
   y: number | null;
   start(): void;
-  addEventListener(type: "reading" | "error", fn: () => void): void;
+  stop(): void;
+  removeEventListener(type: "reading" | "error", fn: (event: Event) => void): void;
+  addEventListener(type: "reading" | "error", fn: (event: Event) => void): void;
 };
 
 function isIos(): boolean {
@@ -49,25 +52,49 @@ export class TiltSensor {
   private target = 0;
   private frozenSec = 0;
   private armed = false;
-  private listening = false;
+  private permissionPending = false;
+  private disposed = false;
+  private readonly lifecycle: MotionLifecycle;
+  private lastGenericAttempt = -Infinity;
+  private resetListeners = new Set<(resumed: boolean) => void>();
   private lastMotionAt = -Infinity;
   private lastSensorAt = -Infinity;
   private genericAccel: GenericAccel | null = null;
   private motionListeners = new Set<(e: DeviceMotionEvent) => void>();
 
   constructor() {
+    this.lifecycle = new MotionLifecycle({
+      window,
+      document: typeof document === "undefined" ? undefined : document,
+      visibility: () => typeof document === "undefined" ? "visible" : document.visibilityState,
+      now: () => performance.now(),
+      onMotion: this.onMotion,
+      onOrientation: this.onOrient,
+      onReset: (resumed) => {
+        this.lastMotionAt = this.lastSensorAt = -Infinity;
+        this.lastGenericAttempt = -Infinity;
+        if (resumed) this.frozenSec = 0;
+        for (const listener of this.resetListeners) {
+          try { listener(resumed); } catch (error) { this.recordError(error); }
+        }
+      },
+      startFallback: () => this.startGenericAccel(),
+      stopFallback: () => this.stopGenericAccel(),
+    });
     // Android 无权限弹窗，保留构造时直接监听。
     if (typeof window !== "undefined" && isAndroid()) this.listen();
   }
 
   /** iOS 权限请求必须由用户手势同步发起。 */
   startFromGesture(): void {
+    if (this.disposed || this.permissionPending) return;
     if (this.armed) {
       this.listen();
       return;
     }
     this.armed = true;
     if (isIos()) {
+      this.permissionPending = true;
       void this.requestIosThenListen();
       return;
     }
@@ -85,7 +112,27 @@ export class TiltSensor {
     return () => { this.motionListeners.delete(listener); };
   }
 
+  subscribeReset(listener: (resumed: boolean) => void): () => void {
+    this.resetListeners.add(listener);
+    return () => { this.resetListeners.delete(listener); };
+  }
+
+  recordError(error: unknown): void { this.lifecycle.recordError(error); }
+
+  getDiagnostics() {
+    return Object.freeze({ ...this.lifecycle.getDiagnostics(), thetaDeg: this.theta * 180 / Math.PI, targetDeg: this.target * 180 / Math.PI,
+      frozenSec: this.frozenSec, genericActive: this.genericAccel !== null });
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.lifecycle.dispose();
+    this.motionListeners.clear();
+    this.resetListeners.clear();
+  }
+
   tick(dt: number): void {
+    this.lifecycle.tick();
     this.frozenSec = Math.max(0, this.frozenSec - dt);
     const a = 1 - Math.exp(-dt / TILT.smoothSec);
     this.theta += (this.target - this.theta) * a;
@@ -101,68 +148,93 @@ export class TiltSensor {
       perm,
       new Promise<void>((resolve) => window.setTimeout(resolve, IOS_PERM_MS)),
     ]);
-    this.listen();
+    this.permissionPending = false;
+    if (!this.disposed) this.listen();
   }
 
   private listen(): void {
-    if (this.listening) return;
-    this.listening = true;
-    window.addEventListener("deviceorientation", (e) => this.onOrient(e), { passive: true });
-    window.addEventListener("devicemotion", (e) => this.onMotion(e), { passive: true });
-    this.startGenericAccel();
+    this.lifecycle.start();
   }
 
   private startGenericAccel(): void {
-    if (this.genericAccel) return;
-    const Ctor = (globalThis as unknown as { Accelerometer?: new (opts: { frequency: number }) => GenericAccel })
-      .Accelerometer;
+    const now = performance.now();
+    if (this.genericAccel || now - this.lastGenericAttempt < MOTION.reattachMinMs) return;
+    const Ctor = (globalThis as unknown as { Accelerometer?: new (opts: { frequency: number }) => GenericAccel }).Accelerometer;
     if (typeof Ctor !== "function") return;
+    this.lastGenericAttempt = now;
     try {
       const sensor = new Ctor({ frequency: 60 });
-      sensor.addEventListener("reading", () => {
-        if (!validXY(sensor.x, sensor.y)) return;
-        this.lastSensorAt = performance.now();
-        if (this.motionFresh()) return;
-        // 通用 Accelerometer 使用标准符号，不套用 iOS 事件的历史修正。
-        this.updatePlane(sensor.x! * TILT.standardAccelSign, sensor.y! * TILT.standardAccelSign);
-      });
-      sensor.addEventListener("error", () => {
-        this.lastSensorAt = -Infinity;
-      });
-      sensor.start();
       this.genericAccel = sensor;
-    } catch {
-      // 无权限或非安全上下文，继续使用事件回退。
+      sensor.addEventListener("reading", this.onGenericReading);
+      sensor.addEventListener("error", this.onGenericError);
+      sensor.start();
+    } catch (error) {
+      this.recordError(error);
+      this.stopGenericAccel();
     }
   }
+
+  private stopGenericAccel(): void {
+    const sensor = this.genericAccel;
+    this.genericAccel = null;
+    this.lastSensorAt = -Infinity;
+    if (!sensor) return;
+    try { sensor.stop(); } catch (error) { this.recordError(error); }
+    try {
+      sensor.removeEventListener("reading", this.onGenericReading);
+      sensor.removeEventListener("error", this.onGenericError);
+    } catch (error) { this.recordError(error); }
+  }
+
+  private onGenericReading = (): void => {
+    try {
+      const sensor = this.genericAccel;
+      if (!sensor || !validXY(sensor.x, sensor.y)) return;
+      this.lastSensorAt = performance.now();
+      if (this.motionFresh()) return;
+      this.updatePlane(sensor.x! * TILT.standardAccelSign, sensor.y! * TILT.standardAccelSign);
+    } catch (error) { this.recordError(error); }
+  };
+
+  private onGenericError = (event: Event): void => {
+    try {
+      this.recordError((event as Event & { error?: Error }).error ?? "Accelerometer error");
+      this.stopGenericAccel();
+    } catch (error) { this.recordError(error); }
+  };
 
   private motionFresh(): boolean {
     return performance.now() - this.lastMotionAt < TILT.sourceStaleMs;
   }
 
-  private onOrient(e: DeviceOrientationEvent): void {
-    if (this.motionFresh() || performance.now() - this.lastSensorAt < TILT.sourceStaleMs) return;
-    if (!validXY(e.beta, e.gamma)) return;
-    const beta = e.beta! * Math.PI / 180;
-    const gamma = e.gamma! * Math.PI / 180;
-    // 由 beta/gamma 还原设备重力投影，避免直接选一个欧拉角导致横屏反向。
-    this.updatePlane(
-      TILT.earthGravity * Math.cos(beta) * Math.sin(gamma),
-      -TILT.earthGravity * Math.sin(beta),
-    );
-  }
+  private onOrient = (e: DeviceOrientationEvent): void => {
+    try {
+      if (this.motionFresh() || performance.now() - this.lastSensorAt < TILT.sourceStaleMs) return;
+      if (!validXY(e.beta, e.gamma)) return;
+      const beta = e.beta! * Math.PI / 180;
+      const gamma = e.gamma! * Math.PI / 180;
+      // 由 beta/gamma 还原设备重力投影，避免直接选一个欧拉角导致横屏反向。
+      this.updatePlane(
+        TILT.earthGravity * Math.cos(beta) * Math.sin(gamma),
+        -TILT.earthGravity * Math.sin(beta),
+      );
+    } catch (error) { this.recordError(error); }
+  };
 
-  private onMotion(e: DeviceMotionEvent): void {
-    for (const listener of this.motionListeners) listener(e);
-    const g = e.accelerationIncludingGravity;
-    if (!g || !validXY(g.x, g.y)) return;
-    // 平放也算有效主数据，防止回退抢占造成抖动。
-    this.lastMotionAt = performance.now();
-    // iOS Safari 历史符号与 Android 相反；假设 iOS 为重力、Android 为支撑力。
-    // 需用两平台真机确认：手机向右倾，屏幕重力 x 应为正。
-    const sign = isIos() ? TILT.iosMotionSign : TILT.standardAccelSign;
-    this.updatePlane(g.x! * sign, g.y! * sign);
-  }
+  private onMotion = (e: DeviceMotionEvent): void => {
+    try {
+      for (const listener of this.motionListeners) {
+        try { listener(e); } catch (error) { this.recordError(error); }
+      }
+      const g = e.accelerationIncludingGravity;
+      if (!g || !validXY(g.x, g.y)) return;
+      // 平放也算有效主数据，防止回退抢占造成抖动。
+      this.lastMotionAt = performance.now();
+      // iOS Safari 历史符号与 Android 相反；需两平台真机确认左右倾方向。
+      const sign = isIos() ? TILT.iosMotionSign : TILT.standardAccelSign;
+      this.updatePlane(g.x! * sign, g.y! * sign);
+    } catch (error) { this.recordError(error); }
+  };
 
   private updatePlane(x: number, y: number): void {
     if (this.frozenSec > 0 || Math.hypot(x, y) < TILT.minPlaneAccel) return;

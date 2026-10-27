@@ -22,6 +22,9 @@ export class ShakeDetector {
   private highPass: Vector = { x: 0, y: 0, z: 0 };
   private lastAt = -Infinity;
   private cooldownUntil = -Infinity;
+  private source: "acceleration" | "high-pass" | "none" = "none";
+  private magnitude = 0;
+  private triggerCount = 0;
 
   /** 清除跨阶段/长时间断流的样本，但保留冷却，不能通过重开绕过。 */
   resetMotion(): void {
@@ -30,11 +33,44 @@ export class ShakeDetector {
     this.previousGravity = null;
     this.highPass = { x: 0, y: 0, z: 0 };
     this.lastAt = -Infinity;
+    this.source = "none";
+    this.magnitude = 0;
+  }
+
+  /** 页面恢复清除旧冷却；普通重开仍使用 resetMotion 保留冷却。 */
+  resetAll(): void {
+    this.resetMotion();
+    this.cooldownUntil = -Infinity;
+  }
+
+  private repairCooldown(nowMs: number): void {
+    if (this.cooldownUntil !== -Infinity && (!Number.isFinite(this.cooldownUntil) ||
+      this.cooldownUntil - nowMs > SHAKE.cooldownSec * 1000 + SHAKE.windowMs)) {
+      this.cooldownUntil = -Infinity;
+    }
+  }
+
+  private reversals(peaks: readonly Peak[]): number {
+    let count = 0;
+    for (let i = 1; i < peaks.length; i++) {
+      if (peaks[i - 1].axis === peaks[i].axis && peaks[i - 1].sign * peaks[i].sign < 0) count++;
+    }
+    return count;
+  }
+
+  getDiagnostics(nowMs = performance.now()) {
+    const peaks = this.peaks.filter((p) => p.at <= nowMs && nowMs - p.at <= SHAKE.windowMs);
+    return Object.freeze({ source: this.source, magnitude: this.magnitude, peaks: peaks.length,
+      reversals: this.reversals(peaks), cooldownSec: Math.max(0, (this.cooldownUntil - nowMs) / 1000),
+      triggerCount: this.triggerCount });
   }
 
   /** 真机与桌面共用入口；v1 防刷分只靠冷却，不限制次数或合成得分。 */
   trigger(intensity: number, nowMs: number): number | null {
-    if (!Number.isFinite(nowMs) || !Number.isFinite(intensity) || nowMs < this.cooldownUntil) return null;
+    if (!Number.isFinite(nowMs) || !Number.isFinite(intensity)) return null;
+    this.repairCooldown(nowMs);
+    if (nowMs < this.cooldownUntil) return null;
+    this.triggerCount++;
     this.cooldownUntil = nowMs + SHAKE.cooldownSec * 1000;
     this.peaks = [];
     return clamp(intensity, 0, 1);
@@ -42,22 +78,28 @@ export class ShakeDetector {
 
   sample(sample: MotionSample, nowMs: number): ShakeResult {
     const result: ShakeResult = { peak: false, intensity: null, dominantSign: null };
-    if (!Number.isFinite(nowMs) || nowMs <= this.lastAt) return result;
-    if (nowMs - this.lastAt > SHAKE.windowMs) this.resetMotion();
+    if (!Number.isFinite(nowMs)) return result;
+    this.repairCooldown(nowMs);
+    if (nowMs < this.lastAt || nowMs - this.lastAt > SHAKE.windowMs ||
+      !valid(this.highPass) || (this.previousGravity !== null && !valid(this.previousGravity))) this.resetMotion();
+    if (nowMs === this.lastAt) return result;
     const dt = (nowMs - this.lastAt) / 1000;
     this.lastAt = nowMs;
     this.peaks = this.peaks.filter((p) => nowMs - p.at <= SHAKE.windowMs);
 
     let a: Vector;
     if (valid(sample.acceleration)) {
+      this.source = "acceleration";
       a = sample.acceleration;
       // 数据源切换时重新建立重力基线，避免把来源差异当成摇晃。
       this.previousGravity = null;
       this.highPass = { x: 0, y: 0, z: 0 };
     } else if (valid(sample.accelerationIncludingGravity)) {
+      this.source = "high-pass";
       const g = sample.accelerationIncludingGravity;
       if (!this.previousGravity) {
         this.previousGravity = { ...g };
+        this.magnitude = 0;
         this.activePeak = null;
         return result;
       }
@@ -73,6 +115,8 @@ export class ShakeDetector {
     }
 
     const magnitude = Math.hypot(a.x, a.y, a.z);
+    if (!valid(a) || !Number.isFinite(magnitude)) { this.resetMotion(); return result; }
+    this.magnitude = magnitude;
     if (magnitude <= SHAKE.thresholdMs2) {
       this.activePeak = null;
       return result;
@@ -90,13 +134,7 @@ export class ShakeDetector {
     // 冷却中仍通知首峰冻结倾斜，但不能积累下一次触发所需的峰。
     if (nowMs < this.cooldownUntil) return result;
     this.peaks.push(peak);
-    let reversals = 0;
-    for (let i = 1; i < this.peaks.length; i++) {
-      const prev = this.peaks[i - 1];
-      const curr = this.peaks[i];
-      // 换轴不是反转；纯 z 方向敲击也不能满足 x/y 反转条件。
-      if (prev.axis === curr.axis && prev.sign * curr.sign < 0) reversals++;
-    }
+    const reversals = this.reversals(this.peaks);
     if (this.peaks.length >= SHAKE.minPeaks && reversals >= SHAKE.minReversals) {
       const max = Math.max(...this.peaks.map((p) => p.magnitude));
       // 采用完成触发的最后一个波瓣的 x/y 主轴符号，传给全缸共用方向。
@@ -111,6 +149,8 @@ export class ShakeDetector {
 export class ShakeSensor {
   readonly detector = new ShakeDetector();
   private unsubscribe: () => void;
+  private unsubscribeReset: () => void;
+  private reportError: (error: unknown) => void;
   private enabled: () => boolean;
   private onShake: (intensity: number, dominantSign: number | null) => void;
 
@@ -119,23 +159,37 @@ export class ShakeSensor {
     onPeak: () => void;
     onShake: (intensity: number, dominantSign: number | null) => void;
   }) {
+    this.reportError = (error) => tilt.recordError(error);
+    this.unsubscribeReset = tilt.subscribeReset((resumed) => {
+      if (resumed) this.detector.resetAll();
+      else this.detector.resetMotion();
+    });
     this.enabled = callbacks.enabled;
     this.onShake = callbacks.onShake;
     this.unsubscribe = tilt.subscribeMotion((event) => {
-      if (!this.enabled()) { this.detector.resetMotion(); return; }
-      const result = this.detector.sample(event, performance.now());
-      if (result.peak) callbacks.onPeak();
-      if (result.intensity !== null) this.onShake(result.intensity, result.dominantSign);
+      this.safely(() => {
+        if (!this.enabled()) { this.detector.resetMotion(); return; }
+        const result = this.detector.sample(event, performance.now());
+        if (result.peak) this.safely(callbacks.onPeak);
+        const intensity = result.intensity;
+        if (intensity !== null) this.safely(() => this.onShake(intensity, result.dominantSign));
+      });
     });
   }
 
-  simulate(intensity: number): void {
-    if (!this.enabled()) return;
-    const accepted = this.detector.trigger(intensity, performance.now());
-    if (accepted !== null) this.onShake(accepted, null);
+  private safely(action: () => void): void {
+    try { action(); } catch (error) { this.reportError(error); }
   }
 
-  dispose(): void { this.unsubscribe(); }
+  simulate(intensity: number): void {
+    this.safely(() => {
+      if (!this.enabled()) return;
+      const accepted = this.detector.trigger(intensity, performance.now());
+      if (accepted !== null) this.onShake(accepted, null);
+    });
+  }
+
+  dispose(): void { this.unsubscribe(); this.unsubscribeReset(); }
 }
 
 /** 一次摇晃只创建一次基准速度向量；桌面没有主轴时才随机选左右。 */
