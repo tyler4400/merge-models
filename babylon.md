@@ -20,7 +20,7 @@ Import from `@babylonjs/core` subpaths (e.g. `@babylonjs/core/Meshes/meshBuilder
 
 ## Physics
 
-Havok is available via `@babylonjs/havok`. Serve `HavokPhysics.wasm` from `public/` and load it with `HavokPhysics({ locateFile: () => "/HavokPhysics.wasm" })` — a `?url` import is blocked by the package `exports`. Enabling physics needs its side-effect module registered (per the rule above); then use `PhysicsAggregate`.
+Havok is available via `@babylonjs/havok`. Initialize it with `await HavokPhysics()`: Vite resolves the package's internal `new URL` and emits a single hashed wasm file under `dist/assets/`, allowing one-year immutable caching. Exclude `@babylonjs/havok` via `optimizeDeps.exclude` so development loads it from its original package location; prebundling into `node_modules/.vite/deps` changes `import.meta.url` and breaks the relative wasm URL. Enabling physics needs its side-effect module registered (per the rule above); then use `PhysicsAggregate`.
 
 ## Capture (self-verify + proof video)
 

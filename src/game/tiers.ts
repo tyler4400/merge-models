@@ -1,15 +1,15 @@
 /** Ten merge tiers. Phase 1 only drops 1–4; the rest exist so later phases can merge. */
 
-import icon01 from "../assets/icons/01-doubao.png";
-import icon02 from "../assets/icons/02-yuanbao.png";
-import icon03 from "../assets/icons/03-qwen.png";
-import icon04 from "../assets/icons/04-kimi.png";
-import icon05 from "../assets/icons/05-deepseek.png";
-import icon06 from "../assets/icons/06-gemini.png";
-import icon07 from "../assets/icons/07-grok.png";
-import icon08 from "../assets/icons/08-chatgpt.png";
-import icon09 from "../assets/icons/09-claude.png";
-import icon10 from "../assets/icons/10-t800.png";
+import icon01 from "../assets/icons/01-doubao.webp";
+import icon02 from "../assets/icons/02-yuanbao.webp";
+import icon03 from "../assets/icons/03-qwen.webp";
+import icon04 from "../assets/icons/04-kimi.webp";
+import icon05 from "../assets/icons/05-deepseek.webp";
+import icon06 from "../assets/icons/06-gemini.webp";
+import icon07 from "../assets/icons/07-grok.webp";
+import icon08 from "../assets/icons/08-chatgpt.webp";
+import icon09 from "../assets/icons/09-claude.webp";
+import icon10 from "../assets/icons/10-t800.webp";
 
 export type TierId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 

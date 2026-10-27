@@ -15,15 +15,11 @@
 
 # 已检查 npm run build：dist/assets/ 内所有文件名均含 Vite 内容 hash，没有 public/ 原样素材。
 # 内容变化会产生新 URL，所以此目录可在浏览器缓存一年，并用 immutable 避免重复校验。
+# Havok 的 wasm 现在也由 Vite 产出带 hash 的文件在 /assets/ 下，同样适用这条规则。
 # 将来若把无 hash 的素材放入 public/assets/，必须先缩小此规则范围或移出该目录。
 # 不要再叠加一条同名 Cache-Control 来尝试覆盖，因为多个匹配规则会合并头值。
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
-
-# 根目录的 HavokPhysics.wasm 文件名没有 hash；缓存一天，之后可重新验证和获取更新。
-# 不使用 immutable，避免升级 Havok 后浏览器长期沿用相同 URL 的旧文件。
-/HavokPhysics.wasm
-  Cache-Control: public, max-age=86400
 
 # 以下仅为学习示例，URL 和响应头都已注释，目前不会生效。
 # 示例：DENY 禁止其它网页用 iframe 嵌入游戏；需要嵌入展示时不要开启。

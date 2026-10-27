@@ -2,7 +2,6 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY scripts/copy-havok.mjs ./scripts/copy-havok.mjs
 RUN npm ci
 COPY . .
 RUN npm run build

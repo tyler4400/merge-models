@@ -1,17 +1,17 @@
 /** 2D token overlay: icon fills the circle; per-tier colored rings are stroked on top. */
 import { CAMERA, DROP, FAIL_LINE_Y, TANK, VIEW } from "./constants";
 import type { Ball } from "./Ball";
-import tok01 from "../assets/tokens/01.png";
-import tok02 from "../assets/tokens/02.png";
-import tok03 from "../assets/tokens/03.png";
-import tok04 from "../assets/tokens/04.png";
-import tok05 from "../assets/tokens/05.png";
-import tok06 from "../assets/tokens/06.png";
-import tok07 from "../assets/tokens/07.png";
-import tok08 from "../assets/tokens/08.png";
-import tok09 from "../assets/tokens/09.png";
-import tok10 from "../assets/tokens/10.png";
-import courtyardUrl from "../assets/levels/01-courtyard.png";
+import tok01 from "../assets/tokens/01.webp";
+import tok02 from "../assets/tokens/02.webp";
+import tok03 from "../assets/tokens/03.webp";
+import tok04 from "../assets/tokens/04.webp";
+import tok05 from "../assets/tokens/05.webp";
+import tok06 from "../assets/tokens/06.webp";
+import tok07 from "../assets/tokens/07.webp";
+import tok08 from "../assets/tokens/08.webp";
+import tok09 from "../assets/tokens/09.webp";
+import tok10 from "../assets/tokens/10.webp";
+import courtyardUrl from "../assets/levels/01-courtyard.webp";
 import { getTier, type TierId } from "./tiers";
 
 const TOKEN_URL: Record<TierId, string> = {

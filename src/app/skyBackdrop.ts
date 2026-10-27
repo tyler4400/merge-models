@@ -3,7 +3,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
 import { CAMERA, VIEW } from "../game/constants";
-import courtyardUrl from "../assets/levels/01-courtyard.png";
+import courtyardUrl from "../assets/levels/01-courtyard.webp";
 
 /** Level 1 courtyard card (painted jar + wood foot). Portrait window of the landscape PNG. */
 export function makeSkyBackdrop(scene: Scene): void {
