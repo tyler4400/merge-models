@@ -36,6 +36,7 @@ export const VIEW = {
 export const FAIL_LINE_Y = TANK.innerHeight * 0.9;
 export const FAIL_HOLD_SEC = 2.0;
 export const FAIL_DROP_GRACE = 0.8;
+export const FAIL_AIRBORNE_VY = 1.0; // |vy| 超过此值时保留失败时钟，不累积、不判负
 export const WARN_SLACK = 1.2;
 
 export const DROP = {
@@ -53,9 +54,9 @@ export const REST = {
 
 export const PHYS = {
   ballRestitution: 0.28,
-  ballFriction: 0.4,
+  ballFriction: 0.2,
   wallRestitution: 0.06,
-  wallFriction: 0.4,
+  wallFriction: 0.2,
   linearDamping: 0.1,
   angularDamping: 0.08,
   zSpring: 52,
@@ -96,21 +97,33 @@ export const SHAKE = {
   thresholdMs2: 17, // 超过此线加速度才计为峰（m/s²）
   fullMs2: 35, // 强度映射到 1 的线加速度（m/s²）
   windowMs: 500, // 峰与方向反转的统计窗口（毫秒）
-  minPeaks: 3, // 窗口内触发所需的最少峰数
+  minPeaks: 2, // 最少峰数；仍须满足两次反转（至少三个交替波瓣）
   minReversals: 2, // 窗口内主轴方向反转的最少次数
   cooldownSec: 2, // 两次触发的最小间隔（秒）；v1 防刷分只靠冷却
-  impulse: 6, // 单位质量的基础向上冲量，即速度增量（m/s）
-  minStrength: 0.5, // 强度 0 对应的冲量倍率，强度 1 对应倍率 1
-  randomMin: 0.6, // 每颗球随机冲量倍率的下限
-  randomMax: 1.2, // 每颗球随机冲量倍率的上限
-  lateralRatio: 0.7, // 横向冲量相对竖直冲量的随机正负上限
-  maxDeltaV: 9, // 合成速度增量的长度上限（m/s）
-  topMargin: 0.15, // 按剩余上升空间限幅时预留的缸口距离（世界单位）
+  impulse: 14, // 单位质量的基础向上冲量，即速度增量（m/s）
+  minStrength: 0.75, // 强度 0 对应的冲量倍率，强度 1 对应倍率 1
+  jitter: 0.15, // 每颗球速度增量大小的 ± 扰动比例
+  angleJitterDeg: 8, // 每颗球相对全缸方向的 ± 角度扰动（度）
+  lateralRatio: 0.45, // 全缸首脉冲横向/竖直分量比；每次只选一次正负方向
+  sloshEnabled: true, // 启用反向横晃的第二脉冲
+  sloshDelayMs: 120, // 第二脉冲延迟（毫秒，由 Game.tick 驱动）
+  sloshRatio: 0.6, // 第二脉冲为每球首脉冲横向分量的反向倍率
+  destroyEscaped: true, // 落在瓶外或地板以下时碎裂销毁；安全边界不受此开关影响
+  maxDeltaV: 18, // 合成速度增量的长度上限（m/s）
   spinScale: 1.2, // 随机旋转强度
-  failPauseSec: 2.5, // 摇晃后暂停失败计时及触发的时间（秒）
+  failPauseSec: 3, // 摇晃后暂停失败计时及触发的时间（秒）
   tiltFreezeSec: 0.8, // 首峰及触发后冻结倾斜目标的时间（秒）
   vibrateMs: [30, 40, 30], // 震动、间隔、震动时长（毫秒）
   desktopIntensity: 0.8, // 桌面 KeyS 模拟摇晃的强度
+} as const;
+
+export const ESCAPE = {
+  belowFloorMargin: 2, // 中心低于地板表面此距离时销毁
+  perchSpeed: 0.6, // 停在侧墙顶上的判定速度上限（m/s）
+  perchSec: 0.5, // 停在侧墙顶上持续此时长即销毁（秒）
+  safetyAbsX: 50,
+  safetyMaxY: 200,
+  safetyMinY: -50,
 } as const;
 
 export const CAMERA = {

@@ -9,7 +9,7 @@ export type MotionSample = {
   accelerationIncludingGravity: Acceleration | null;
 };
 type Peak = { at: number; axis: "x" | "y"; sign: number; magnitude: number };
-export type ShakeResult = { peak: boolean; intensity: number | null };
+export type ShakeResult = { peak: boolean; intensity: number | null; dominantSign: number | null };
 
 function valid(a: Acceleration | null): a is Vector {
   return !!a && [a.x, a.y, a.z].every((v) => typeof v === "number" && Number.isFinite(v));
@@ -41,7 +41,7 @@ export class ShakeDetector {
   }
 
   sample(sample: MotionSample, nowMs: number): ShakeResult {
-    const result: ShakeResult = { peak: false, intensity: null };
+    const result: ShakeResult = { peak: false, intensity: null, dominantSign: null };
     if (!Number.isFinite(nowMs) || nowMs <= this.lastAt) return result;
     if (nowMs - this.lastAt > SHAKE.windowMs) this.resetMotion();
     const dt = (nowMs - this.lastAt) / 1000;
@@ -99,6 +99,8 @@ export class ShakeDetector {
     }
     if (this.peaks.length >= SHAKE.minPeaks && reversals >= SHAKE.minReversals) {
       const max = Math.max(...this.peaks.map((p) => p.magnitude));
+      // 采用完成触发的最后一个波瓣的 x/y 主轴符号，传给全缸共用方向。
+      result.dominantSign = sign;
       result.intensity = this.trigger((max - SHAKE.thresholdMs2) / (SHAKE.fullMs2 - SHAKE.thresholdMs2), nowMs);
     }
     return result;
@@ -110,12 +112,12 @@ export class ShakeSensor {
   readonly detector = new ShakeDetector();
   private unsubscribe: () => void;
   private enabled: () => boolean;
-  private onShake: (intensity: number) => void;
+  private onShake: (intensity: number, dominantSign: number | null) => void;
 
   constructor(tilt: TiltSensor, callbacks: {
     enabled: () => boolean;
     onPeak: () => void;
-    onShake: (intensity: number) => void;
+    onShake: (intensity: number, dominantSign: number | null) => void;
   }) {
     this.enabled = callbacks.enabled;
     this.onShake = callbacks.onShake;
@@ -123,15 +125,33 @@ export class ShakeSensor {
       if (!this.enabled()) { this.detector.resetMotion(); return; }
       const result = this.detector.sample(event, performance.now());
       if (result.peak) callbacks.onPeak();
-      if (result.intensity !== null) this.onShake(result.intensity);
+      if (result.intensity !== null) this.onShake(result.intensity, result.dominantSign);
     });
   }
 
   simulate(intensity: number): void {
     if (!this.enabled()) return;
     const accepted = this.detector.trigger(intensity, performance.now());
-    if (accepted !== null) this.onShake(accepted);
+    if (accepted !== null) this.onShake(accepted, null);
   }
 
   dispose(): void { this.unsubscribe(); }
+}
+
+/** 一次摇晃只创建一次基准速度向量；桌面没有主轴时才随机选左右。 */
+export function createShakePulse(intensity: number, dominantSign: number | null, random = Math.random): Vector {
+  const sign = dominantSign === 1 || dominantSign === -1 ? dominantSign : (random() < 0.5 ? -1 : 1);
+  const dy = SHAKE.impulse * (SHAKE.minStrength + (1 - SHAKE.minStrength) * clamp(intensity, 0, 1));
+  return { x: sign * dy * SHAKE.lateralRatio, y: dy, z: 0 };
+}
+
+/** 每球只对共同向量施加小幅长度/角度扰动，最后限制合成 Δv。 */
+export function jitterShakePulse(pulse: Vector, random = Math.random): Vector {
+  const magnitude = Math.min(SHAKE.maxDeltaV, Math.hypot(pulse.x, pulse.y) * (1 + (random() * 2 - 1) * SHAKE.jitter));
+  const angle = Math.atan2(pulse.x, pulse.y) + (random() * 2 - 1) * SHAKE.angleJitterDeg * Math.PI / 180;
+  return { x: magnitude * Math.sin(angle), y: magnitude * Math.cos(angle), z: 0 };
+}
+
+export function sloshPulse(first: Vector): Vector {
+  return { x: -first.x * SHAKE.sloshRatio, y: 0, z: 0 };
 }

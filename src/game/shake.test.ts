@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { TiltSensor } from "./tilt.ts";
 import { SHAKE } from "./constants.ts";
-import { ShakeDetector, type MotionSample } from "./shake.ts";
+import { ShakeDetector, ShakeSensor, createShakePulse, jitterShakePulse, sloshPulse, type MotionSample } from "./shake.ts";
 
 const linear = (x: number, y = 0, z = 0): MotionSample => ({
   acceleration: { x, y, z }, accelerationIncludingGravity: null,
@@ -20,11 +21,13 @@ describe("ShakeDetector", () => {
     const detector = new ShakeDetector();
     assert.equal(detector.sample(linear(50), 0).peak, true);
     for (let t = 10; t <= 600; t += 10) {
-      assert.deepEqual(detector.sample(linear(50), t), { peak: false, intensity: null });
+      assert.deepEqual(detector.sample(linear(50), t), { peak: false, intensity: null, dominantSign: null });
     }
   });
 
-  it("窗口内三个峰、两次反转触发，x/y 主轴均支持", () => {
+  it("minPeaks=2 下仍需两次反转触发，x/y 主轴均支持", () => {
+    assert.equal(SHAKE.minPeaks, 2);
+    assert.equal(SHAKE.minReversals, 2);
     for (const axis of ["x", "y"] as const) {
       const detector = new ShakeDetector();
       const sample = (v: number) => axis === "x" ? linear(v) : linear(0, v);
@@ -123,5 +126,87 @@ describe("ShakeDetector", () => {
     assert.equal(shake(detector, 2000), 0.5);
     assert.equal(detector.trigger(0.8, 2201), null);
     assert.equal(detector.trigger(0.8, 4200), 0.8);
+  });
+});
+
+
+describe("摇晃方向与冲量", () => {
+  it("触发输出最后波瓣的主轴符号，未触发不提供方向", () => {
+    for (const axis of ["x", "y"] as const) for (const sign of [-1, 1]) {
+      const detector = new ShakeDetector();
+      const sample = (v: number) => axis === "x" ? linear(v, 1) : linear(1, v);
+      assert.equal(detector.sample(sample(sign * 26), 0).dominantSign, null);
+      assert.equal(detector.sample(sample(-sign * 26), 100).dominantSign, null);
+      assert.deepEqual(detector.sample(sample(sign * 26), 200), { peak: true, intensity: (Math.hypot(26, 1) - SHAKE.thresholdMs2) / (SHAKE.fullMs2 - SHAKE.thresholdMs2), dominantSign: sign });
+      assert.equal(detector.sample(sample(-sign * 26), 300).dominantSign, null);
+    }
+  });
+
+  it("浏览器适配传递 dominantSign，桌面缺省方向并共用冷却", (t) => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    let push: (event: MotionSample) => void = () => {};
+    const tilt = { subscribeMotion(callback: typeof push) { push = callback; return () => {}; } };
+    const calls: Array<[number, number | null]> = [];
+    const sensor = new ShakeSensor(tilt as unknown as TiltSensor, {
+      enabled: () => true, onPeak: () => {},
+      onShake: (intensity, sign) => calls.push([intensity, sign]),
+    });
+    push(linear(-26)); now = 100; push(linear(26)); now = 200; push(linear(-26));
+    assert.deepEqual(calls, [[0.5, -1]]);
+    sensor.simulate(0.8);
+    assert.equal(calls.length, 1);
+    const desktop = new ShakeSensor(tilt as unknown as TiltSensor, {
+      enabled: () => true, onPeak: () => {},
+      onShake: (intensity, sign) => calls.push([intensity, sign]),
+    });
+    desktop.simulate(0.8);
+    assert.deepEqual(calls[1], [0.8, null]);
+    sensor.dispose(); desktop.dispose();
+  });
+
+  it("主轴符号优先；无符号时只在创建全缸脉冲时随机选一次", () => {
+    const noRandom = () => { throw new Error("检测器已有方向，不应随机"); };
+    for (const sign of [-1, 1]) {
+      const pulse = createShakePulse(1, sign, noRandom);
+      assert.equal(pulse.y, SHAKE.impulse);
+      assert.equal(pulse.x / pulse.y, sign * SHAKE.lateralRatio);
+    }
+    let calls = 0;
+    const pulse = createShakePulse(0, null, () => { calls++; return 0; });
+    assert.equal(calls, 1);
+    assert.equal(pulse.y, SHAKE.impulse * SHAKE.minStrength);
+    assert.ok(pulse.x < 0);
+    assert.ok(createShakePulse(0, null, () => 1).x > 0);
+    assert.deepEqual(createShakePulse(-1, 1), createShakePulse(0, 1));
+    assert.deepEqual(createShakePulse(2, 1), createShakePulse(1, 1));
+  });
+
+  it("每球共用左右方向且向上为主，长度 ±15%、角度 ±8°", () => {
+    for (const sign of [-1, 1]) for (const intensity of [0, 0.8, 1]) {
+      const pulse = createShakePulse(intensity, sign);
+      const baseLength = Math.hypot(pulse.x, pulse.y);
+      const baseAngle = Math.atan2(pulse.x, pulse.y);
+      for (const size of [0, 0.25, 0.5, 0.75, 1]) for (const angle of [0, 0.25, 0.5, 0.75, 1]) {
+        const samples = [size, angle];
+        const v = jitterShakePulse(pulse, () => samples.shift()!);
+        assert.equal(Math.sign(v.x), sign);
+        assert.ok(v.y > Math.abs(v.x));
+        assert.equal(v.z, 0);
+        const expectedLength = Math.min(SHAKE.maxDeltaV, baseLength * (1 + (size * 2 - 1) * SHAKE.jitter));
+        assert.ok(Math.abs(Math.hypot(v.x, v.y) - expectedLength) < 1e-10);
+        const expectedAngle = baseAngle + (angle * 2 - 1) * SHAKE.angleJitterDeg * Math.PI / 180;
+        assert.ok(Math.abs(Math.atan2(v.x, v.y) - expectedAngle) < 1e-10);
+      }
+    }
+  });
+
+  it("Δv 上限 14，二段晃仅为首脉冲横向的反向 0.6 倍", () => {
+    const large = jitterShakePulse({ x: 45, y: 100, z: 0 }, () => 0.5);
+    assert.ok(Math.abs(Math.hypot(large.x, large.y) - SHAKE.maxDeltaV) < 1e-10);
+    for (const sign of [-1, 1]) {
+      const first = jitterShakePulse(createShakePulse(0.8, sign), () => 0.5);
+      assert.deepEqual(sloshPulse(first), { x: -first.x * SHAKE.sloshRatio, y: 0, z: 0 });
+    }
   });
 });

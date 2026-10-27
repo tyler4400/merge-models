@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { FAIL_DROP_GRACE, FAIL_HOLD_SEC, FAIL_LINE_Y, WARN_SLACK } from "./constants.ts";
+import { FAIL_AIRBORNE_VY, FAIL_DROP_GRACE, FAIL_HOLD_SEC, FAIL_LINE_Y, WARN_SLACK } from "./constants.ts";
 import { tickFail, type FailSample } from "./failCheck.ts";
 
 function sample(over: Partial<FailSample> = {}): FailSample {
@@ -116,12 +116,11 @@ describe("tickFail", () => {
     assert.equal(r.clocks[0], 0);
   });
 
-  it("fails after 2.1s over the line even while falling; warn stays off", () => {
-    // Fail clock ignores vy (high pile can still lose). Warn does not fire while falling through.
-    const r = simulate([sample({ vy: -5 })], 2.1);
-    assert.equal(r.failed, true);
+  it("does not accumulate or fail while falling fast; warn stays off", () => {
+    const r = simulate([sample({ vy: -5, failClock: 1.2 })], 2.1);
+    assert.equal(r.failed, false);
     assert.equal(r.warn, false);
-    assert.ok(r.clocks[0]! >= FAIL_HOLD_SEC);
+    assert.equal(r.clocks[0], 1.2);
   });
 
   it("fails when only one of two balls is over the line for 2.1s", () => {
@@ -132,6 +131,32 @@ describe("tickFail", () => {
     assert.equal(r.failed, true);
     assert.ok(r.clocks[0]! >= FAIL_HOLD_SEC);
     assert.equal(r.clocks[1], 0);
+  });
+});
+
+describe("空中失败宽限", () => {
+  it("上升、下降及穿过线下均保持时钟，已有阈值也不判负", () => {
+    for (const vy of [-5, -FAIL_AIRBORNE_VY - 0.01, FAIL_AIRBORNE_VY + 0.01, 5]) {
+      for (const topY of [FAIL_LINE_Y - 1, FAIL_LINE_Y + 1]) {
+        for (const failClock of [0, 1.2, FAIL_HOLD_SEC]) {
+          const r = tickFail([sample({ vy, topY, failClock })], 10);
+          assert.equal(r.clocks[0], failClock);
+          assert.equal(r.failed, false);
+        }
+      }
+    }
+  });
+
+  it("速度降至阈值或缺省后恢复计时，线下恢复清零", () => {
+    for (const vy of [-FAIL_AIRBORNE_VY, 0, FAIL_AIRBORNE_VY, undefined]) {
+      const b = sample({ failClock: 1.9, vy: 5 });
+      b.failClock = tickFail([b], 3).clocks[0]!;
+      b.vy = vy;
+      const r = tickFail([b], 0.2);
+      assert.equal(r.clocks[0], 2.1);
+      assert.equal(r.failed, true);
+      assert.equal(tickFail([{ ...b, topY: FAIL_LINE_Y - 1 }], 0.2).clocks[0], 0);
+    }
   });
 });
 

@@ -160,11 +160,10 @@ export class TokenLayer {
   }
 
   /** Snapshot the token and spawn a prune-snip shatter in canvas pixel space. */
-  burst(ball: Ball): void {
+  burst(ball: Ball, at = ball.mesh.getAbsolutePosition()): void {
     const img = images.get(ball.tier);
     if (!img) return;
-    const p = ball.mesh.getAbsolutePosition();
-    const { sx, sy } = this.worldToScreen(p.x, p.y);
+    const { sx, sy } = this.worldToScreen(at.x, at.y);
     const r = Math.max(4, this.radiusPx(ball.radius * ball.mesh.scaling.x));
     const dur = 0.46 + Math.random() * 0.12;
     const n = 8 + Math.floor(Math.random() * 5);

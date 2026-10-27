@@ -1,5 +1,5 @@
 /** Pure fail-line check (no Babylon) so it can be unit-tested. */
-import { FAIL_DROP_GRACE, FAIL_HOLD_SEC, FAIL_LINE_Y, WARN_SLACK } from "./constants.ts";
+import { FAIL_AIRBORNE_VY, FAIL_DROP_GRACE, FAIL_HOLD_SEC, FAIL_LINE_Y, WARN_SLACK } from "./constants.ts";
 
 export type FailSample = {
   held: boolean;
@@ -48,6 +48,12 @@ export function tickFail(
     const vy = b.vy ?? 0;
     const falling = vy < -0.25;
     if (!falling && b.topY > FAIL_LINE_Y - WARN_SLACK) warn = true;
+
+    // 上抛、回落均保留已有时钟，包括穿过警戒线时；落稳后恢复正常判定。
+    if (Math.abs(vy) > FAIL_AIRBORNE_VY) {
+      clocks.push(b.failClock);
+      continue;
+    }
 
     const next = b.topY > FAIL_LINE_Y ? b.failClock + (opts.paused ? 0 : dt) : 0;
     clocks.push(next);
