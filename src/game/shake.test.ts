@@ -11,17 +11,49 @@ const gravity = (x: number, y = 9.81, z = 0): MotionSample => ({
   acceleration: null, accelerationIncludingGravity: { x, y, z },
 });
 function shake(detector: ShakeDetector, at = 0, magnitude = 26): number | null {
-  assert.equal(detector.sample(linear(magnitude), at).intensity, null);
-  assert.equal(detector.sample(linear(-magnitude), at + 100).intensity, null);
-  return detector.sample(linear(magnitude), at + 200).intensity;
+  assert.equal(detector.sample(linear(magnitude), at, true).intensity, null);
+  assert.equal(detector.sample(linear(-magnitude), at + 100, true).intensity, null);
+  return detector.sample(linear(magnitude), at + 200, true).intensity;
 }
 
 describe("ShakeDetector", () => {
+  it("未就绪时满足条件只积累峰，不触发或耗冷却；就绪后同一波瓣立即可触发", () => {
+    const detector = new ShakeDetector();
+    for (const [i, x] of [26, -26, 26].entries()) {
+      assert.deepEqual(detector.sample(linear(x), i * 100, false), {
+        peak: true, intensity: null, dominantSign: null,
+      });
+      assert.equal(detector.getDiagnostics(i * 100).cooldownSec, 0);
+      assert.equal(detector.getDiagnostics(i * 100).triggerCount, 0);
+    }
+    assert.equal(detector.getDiagnostics(200).peaks, 3);
+    assert.equal(detector.getDiagnostics(200).reversals, 2);
+    assert.equal(detector.sample(linear(26), 201, true).intensity, 0.5);
+    assert.equal(detector.getDiagnostics(201).cooldownSec, SHAKE.cooldownSec);
+    assert.equal(detector.getDiagnostics(201).triggerCount, 1);
+  });
+
+  it("未就绪时高通继续采样，窗口照常过期，就绪后仍需有效窗口", () => {
+    const detector = new ShakeDetector();
+    for (const [i, x] of [0, 30, -30, 30].entries()) {
+      assert.equal(detector.sample(gravity(x), i * 20, false).intensity, null);
+    }
+    assert.equal(detector.getDiagnostics(60).source, "high-pass");
+    assert.equal(detector.getDiagnostics(60).peaks, 3);
+    assert.equal(detector.getDiagnostics(60).cooldownSec, 0);
+    assert.notEqual(detector.sample(gravity(-30), 80, true).intensity, null);
+
+    const expired = new ShakeDetector();
+    for (const [i, x] of [26, -26, 26].entries()) expired.sample(linear(x), i * 100, false);
+    assert.equal(expired.sample(linear(-26), 200 + SHAKE.windowMs + 1, true).intensity, null);
+    assert.equal(expired.getDiagnostics(701).peaks, 1);
+  });
+
   it("单个大峰、连续高值平台不触发", () => {
     const detector = new ShakeDetector();
-    assert.equal(detector.sample(linear(50), 0).peak, true);
+    assert.equal(detector.sample(linear(50), 0, true).peak, true);
     for (let t = 10; t <= 600; t += 10) {
-      assert.deepEqual(detector.sample(linear(50), t), { peak: false, intensity: null, dominantSign: null });
+      assert.deepEqual(detector.sample(linear(50), t, true), { peak: false, intensity: null, dominantSign: null });
     }
   });
 
@@ -31,9 +63,9 @@ describe("ShakeDetector", () => {
     for (const axis of ["x", "y"] as const) {
       const detector = new ShakeDetector();
       const sample = (v: number) => axis === "x" ? linear(v) : linear(0, v);
-      assert.equal(detector.sample(sample(26), 0).intensity, null);
-      assert.equal(detector.sample(sample(-26), 100).intensity, null);
-      assert.equal(detector.sample(sample(26), 200).intensity, 0.5);
+      assert.equal(detector.sample(sample(26), 0, true).intensity, null);
+      assert.equal(detector.sample(sample(-26), 100, true).intensity, null);
+      assert.equal(detector.sample(sample(26), 200, true).intensity, 0.5);
     }
   });
 
@@ -46,8 +78,8 @@ describe("ShakeDetector", () => {
     ]) {
       const detector = new ShakeDetector();
       inputs.forEach((input, i) => {
-        assert.equal(detector.sample(input, i * 100).intensity, null);
-        detector.sample(linear(0), i * 100 + 50);
+        assert.equal(detector.sample(input, i * 100, true).intensity, null);
+        detector.sample(linear(0), i * 100 + 50, true);
       });
     }
   });
@@ -55,9 +87,9 @@ describe("ShakeDetector", () => {
   it("窗口边界包含 500ms，过期峰和反转不沿用", () => {
     for (const end of [SHAKE.windowMs, SHAKE.windowMs + 1]) {
       const detector = new ShakeDetector();
-      detector.sample(linear(26), 0);
-      detector.sample(linear(-26), 250);
-      assert.equal(detector.sample(linear(26), end).intensity, end === SHAKE.windowMs ? 0.5 : null);
+      detector.sample(linear(26), 0, true);
+      detector.sample(linear(-26), 250, true);
+      assert.equal(detector.sample(linear(26), end, true).intensity, end === SHAKE.windowMs ? 0.5 : null);
     }
   });
 
@@ -66,7 +98,7 @@ describe("ShakeDetector", () => {
     assert.equal(shake(detector), 0.5);
     assert.equal(shake(detector, 500), null);
     assert.equal(shake(detector, 1900), null);
-    detector.sample(linear(0), 2190);
+    detector.sample(linear(0), 2190, true);
     assert.equal(shake(detector, 2200), 0.5);
   });
 
@@ -77,10 +109,10 @@ describe("ShakeDetector", () => {
       assert.equal(shake(detector, 0, magnitude), expected);
     }
     const detector = new ShakeDetector();
-    detector.sample(linear(18), 0);
-    detector.sample(linear(35), 30);
-    detector.sample(linear(-18), 100);
-    assert.equal(detector.sample(linear(18), 200).intensity, 1);
+    detector.sample(linear(18), 0, true);
+    detector.sample(linear(35), 30, true);
+    detector.sample(linear(-18), 100, true);
+    assert.equal(detector.sample(linear(18), 200, true).intensity, 1);
     const below = new ShakeDetector();
     assert.equal(shake(below, 0, SHAKE.thresholdMs2), null);
   });
@@ -88,33 +120,33 @@ describe("ShakeDetector", () => {
   it("优先使用无重力 acceleration，即使含重力数据剧烈波动", () => {
     const detector = new ShakeDetector();
     for (let i = 0; i < 10; i++) {
-      assert.equal(detector.sample({ ...gravity(i % 2 ? 100 : -100), acceleration: { x: 0, y: 0, z: 0 } }, i * 20).peak, false);
+      assert.equal(detector.sample({ ...gravity(i % 2 ? 100 : -100), acceleration: { x: 0, y: 0, z: 0 } }, i * 20, true).peak, false);
     }
   });
 
   it("高通回退：首帧建立基线，静态重力不触发，交替线加速度能触发", () => {
     const detector = new ShakeDetector();
-    assert.equal(detector.sample(gravity(0), 0).peak, false);
-    assert.equal(detector.sample(gravity(0), 20).peak, false);
-    assert.equal(detector.sample(gravity(30), 40).intensity, null);
-    assert.equal(detector.sample(gravity(-30), 60).intensity, null);
-    const result = detector.sample(gravity(30), 80);
+    assert.equal(detector.sample(gravity(0), 0, true).peak, false);
+    assert.equal(detector.sample(gravity(0), 20, true).peak, false);
+    assert.equal(detector.sample(gravity(30), 40, true).intensity, null);
+    assert.equal(detector.sample(gravity(-30), 60, true).intensity, null);
+    const result = detector.sample(gravity(30), 80, true);
     // alpha=5/6；三个峰的模长依次为 25、29.1667、25.6944。
     assert.ok(Math.abs(result.intensity! - ((175 / 6 - 17) / 18)) < 1e-10);
     for (let t = 100; t <= 3000; t += 20) {
-      assert.equal(detector.sample(gravity(30), t).intensity, null);
+      assert.equal(detector.sample(gravity(30), t, true).intensity, null);
     }
   });
 
   it("无效数据和长断流不沿用旧峰，时钟回退重建窗口", () => {
     const detector = new ShakeDetector();
-    detector.sample(linear(30), 0);
-    assert.equal(detector.sample(linear(-30), -1).peak, true);
-    assert.equal(detector.sample(linear(-30), NaN).peak, false);
-    detector.sample(linear(NaN), 10);
-    detector.sample(linear(-30), 20);
-    assert.equal(detector.sample(linear(30), 30).intensity, null);
-    assert.equal(detector.sample(linear(-30), 1000).intensity, null);
+    detector.sample(linear(30), 0, true);
+    assert.equal(detector.sample(linear(-30), -1, true).peak, true);
+    assert.equal(detector.sample(linear(-30), NaN, true).peak, false);
+    detector.sample(linear(NaN), 10, true);
+    detector.sample(linear(-30), 20, true);
+    assert.equal(detector.sample(linear(30), 30, true).intensity, null);
+    assert.equal(detector.sample(linear(-30), 1000, true).intensity, null);
   });
 
   it("桌面模拟与传感器共用冷却，清空样本不能绕过冷却", () => {
@@ -129,16 +161,72 @@ describe("ShakeDetector", () => {
   });
 });
 
+describe("ShakeSensor 警告门控", () => {
+  it("未就绪时不调用 onPeak/onShake，不清样本；就绪后下一峰立即触发", (t) => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    let armed = false;
+    let push: (event: MotionSample) => void = () => {};
+    const tilt = { subscribeMotion(callback: typeof push) { push = callback; return () => {}; },
+      subscribeReset() { return () => {}; }, recordError(error: unknown) { throw error; } };
+    let peaks = 0;
+    let shakes = 0;
+    const sensor = new ShakeSensor(tilt as unknown as TiltSensor, {
+      enabled: () => true, armed: () => armed,
+      onPeak: () => { peaks++; }, onShake: () => { shakes++; },
+    });
+    for (const x of [26, -26, 26]) { now += 100; push(linear(x)); }
+    assert.equal(peaks, 0);
+    assert.equal(shakes, 0);
+    assert.equal(sensor.detector.getDiagnostics(now).peaks, 3);
+    assert.equal(sensor.detector.getDiagnostics(now).cooldownSec, 0);
+    armed = true; now++; push(linear(-26));
+    assert.equal(peaks, 1);
+    assert.equal(shakes, 1);
+    armed = false; now++; push(linear(26));
+    assert.equal(peaks, 1);
+    assert.equal(shakes, 1);
+    sensor.dispose();
+  });
+
+  it("simulate 未就绪不触发、不耗冷却；就绪立即触发，关闭门控不延长既有冷却", (t) => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    let armed = false;
+    const tilt = { subscribeMotion() { return () => {}; }, subscribeReset() { return () => {}; },
+      recordError(error: unknown) { throw error; } };
+    let shakes = 0;
+    const sensor = new ShakeSensor(tilt as unknown as TiltSensor, {
+      enabled: () => true, armed: () => armed,
+      onPeak: () => assert.fail("模拟不调用 onPeak"), onShake: () => { shakes++; },
+    });
+    sensor.simulate(0.8);
+    assert.equal(shakes, 0);
+    assert.equal(sensor.detector.getDiagnostics(now).triggerCount, 0);
+    assert.equal(sensor.detector.getDiagnostics(now).cooldownSec, 0);
+    armed = true; sensor.simulate(0.8);
+    assert.equal(shakes, 1);
+    armed = false; now = 1000; sensor.simulate(0.8);
+    assert.equal(shakes, 1);
+    assert.equal(sensor.detector.getDiagnostics(now).cooldownSec, 1);
+    now = SHAKE.cooldownSec * 1000; sensor.simulate(0.8);
+    assert.equal(sensor.detector.getDiagnostics(now).cooldownSec, 0);
+    armed = true; sensor.simulate(0.8);
+    assert.equal(shakes, 2);
+    sensor.dispose();
+  });
+});
+
 
 describe("摇晃方向与冲量", () => {
   it("触发输出最后波瓣的主轴符号，未触发不提供方向", () => {
     for (const axis of ["x", "y"] as const) for (const sign of [-1, 1]) {
       const detector = new ShakeDetector();
       const sample = (v: number) => axis === "x" ? linear(v, 1) : linear(1, v);
-      assert.equal(detector.sample(sample(sign * 26), 0).dominantSign, null);
-      assert.equal(detector.sample(sample(-sign * 26), 100).dominantSign, null);
-      assert.deepEqual(detector.sample(sample(sign * 26), 200), { peak: true, intensity: (Math.hypot(26, 1) - SHAKE.thresholdMs2) / (SHAKE.fullMs2 - SHAKE.thresholdMs2), dominantSign: sign });
-      assert.equal(detector.sample(sample(-sign * 26), 300).dominantSign, null);
+      assert.equal(detector.sample(sample(sign * 26), 0, true).dominantSign, null);
+      assert.equal(detector.sample(sample(-sign * 26), 100, true).dominantSign, null);
+      assert.deepEqual(detector.sample(sample(sign * 26), 200, true), { peak: true, intensity: (Math.hypot(26, 1) - SHAKE.thresholdMs2) / (SHAKE.fullMs2 - SHAKE.thresholdMs2), dominantSign: sign });
+      assert.equal(detector.sample(sample(-sign * 26), 300, true).dominantSign, null);
     }
   });
 
@@ -150,7 +238,7 @@ describe("摇晃方向与冲量", () => {
       subscribeReset() { return () => {}; }, recordError(error: unknown) { throw error; } };
     const calls: Array<[number, number | null]> = [];
     const sensor = new ShakeSensor(tilt as unknown as TiltSensor, {
-      enabled: () => true, onPeak: () => {},
+      enabled: () => true, armed: () => true, onPeak: () => {},
       onShake: (intensity, sign) => calls.push([intensity, sign]),
     });
     push(linear(-26)); now = 100; push(linear(26)); now = 200; push(linear(-26));
@@ -158,7 +246,7 @@ describe("摇晃方向与冲量", () => {
     sensor.simulate(0.8);
     assert.equal(calls.length, 1);
     const desktop = new ShakeSensor(tilt as unknown as TiltSensor, {
-      enabled: () => true, onPeak: () => {},
+      enabled: () => true, armed: () => true, onPeak: () => {},
       onShake: (intensity, sign) => calls.push([intensity, sign]),
     });
     desktop.simulate(0.8);
@@ -230,7 +318,7 @@ describe("长期运行与异常恢复", () => {
       let sample = cycle % 2 ? gravity(x) : linear(x);
       if (frame === 6001) sample = { acceleration: null, accelerationIncludingGravity: null };
       if (frame === 9601) sample = linear(NaN);
-      const result = detector.sample(sample, now);
+      const result = detector.sample(sample, now, true);
       if (result.intensity !== null) {
         assert.equal(wave, true, `安静噪声误触 frame=${frame}`);
         triggers++;
@@ -254,20 +342,20 @@ describe("长期运行与异常恢复", () => {
 
   it("有限极值运算溢出不污染高通，后续普通高通摇晃仍有效", () => {
     const detector = new ShakeDetector();
-    detector.sample(gravity(-Number.MAX_VALUE), 0);
-    detector.sample(gravity(Number.MAX_VALUE), 20);
+    detector.sample(gravity(-Number.MAX_VALUE), 0, true);
+    detector.sample(gravity(Number.MAX_VALUE), 20, true);
     assert.equal(detector.getDiagnostics(20).source, "none");
-    detector.sample(gravity(0), 40);
-    detector.sample(gravity(30), 60);
-    detector.sample(gravity(-30), 80);
-    assert.notEqual(detector.sample(gravity(30), 100).intensity, null);
+    detector.sample(gravity(0), 40, true);
+    detector.sample(gravity(30), 60, true);
+    detector.sample(gravity(-30), 80, true);
+    assert.notEqual(detector.sample(gravity(30), 100, true).intensity, null);
     assert.ok(Number.isFinite(detector.getDiagnostics(100).magnitude));
   });
 
   it("诊断窗口随时间过期，返回只读快照", () => {
     const detector = new ShakeDetector();
-    detector.sample(linear(30), 0);
-    detector.sample(linear(-30), 100);
+    detector.sample(linear(30), 0, true);
+    detector.sample(linear(-30), 100, true);
     const before = detector.getDiagnostics(100);
     assert.equal(before.peaks, 2); assert.equal(before.reversals, 1);
     assert.equal(Object.isFrozen(before), true);

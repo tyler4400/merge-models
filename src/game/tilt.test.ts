@@ -63,7 +63,7 @@ describe("TiltSensor", () => {
     let enabled = true;
     let shakes = 0;
     const sensor = new ShakeSensor(tilt, {
-      enabled: () => enabled,
+      enabled: () => enabled, armed: () => true,
       onPeak: () => tilt.freeze(SHAKE.tiltFreezeSec),
       onShake: () => { shakes++; },
     });
@@ -108,7 +108,7 @@ describe("TiltSensor", () => {
     const tilt = new TiltSensor();
     let peaks = 0;
     const sensor = new ShakeSensor(tilt, {
-      enabled: () => true, onPeak: () => { peaks++; }, onShake: () => {},
+      enabled: () => true, armed: () => true, onPeak: () => { peaks++; }, onShake: () => {},
     });
     const push = () => send("devicemotion", {
       acceleration: { x: 26, y: 0, z: 0 }, accelerationIncludingGravity: null,
@@ -300,7 +300,7 @@ describe("传感器恢复集成", () => {
     const tilt = new TiltSensor();
     let shakes = 0;
     const shake = new ShakeSensor(tilt, {
-      enabled: () => true, onPeak: () => tilt.freeze(0.8), onShake: () => { shakes++; },
+      enabled: () => true, armed: () => true, onPeak: () => tilt.freeze(0.8), onShake: () => { shakes++; },
     });
     tilt.startFromGesture(); tilt.startFromGesture();
     await new Promise((resolve) => setImmediate(resolve));
@@ -328,7 +328,7 @@ describe("传感器恢复集成", () => {
     let calls = 0;
     let other = 0;
     const shake = new ShakeSensor(tilt, {
-      enabled: () => true,
+      enabled: () => true, armed: () => true,
       onPeak: () => { throw new Error("onPeak broken"); },
       onShake: () => { calls++; if (calls === 1) throw new Error("applyShake broken"); },
     });
@@ -352,7 +352,7 @@ describe("传感器恢复集成", () => {
     let phase = "title";
     let calls = 0;
     const shake = new ShakeSensor(tilt, {
-      enabled: () => phase === "playing" || phase === "hammerAim",
+      enabled: () => phase === "playing" || phase === "hammerAim", armed: () => true,
       onPeak: () => {}, onShake: () => { calls++; },
     });
     for (const next of ["title", "playing", "won", "playing", "hammerAim", "playing", "dead", "playing"]) {

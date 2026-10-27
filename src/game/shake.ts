@@ -65,7 +65,7 @@ export class ShakeDetector {
       triggerCount: this.triggerCount });
   }
 
-  /** 真机与桌面共用入口；v1 防刷分只靠冷却，不限制次数或合成得分。 */
+  /** 真机与桌面共用冷却入口；调用前须通过警告门控，不限制次数或合成得分。 */
   trigger(intensity: number, nowMs: number): number | null {
     if (!Number.isFinite(nowMs) || !Number.isFinite(intensity)) return null;
     this.repairCooldown(nowMs);
@@ -76,7 +76,7 @@ export class ShakeDetector {
     return clamp(intensity, 0, 1);
   }
 
-  sample(sample: MotionSample, nowMs: number): ShakeResult {
+  sample(sample: MotionSample, nowMs: number, armed: boolean): ShakeResult {
     const result: ShakeResult = { peak: false, intensity: null, dominantSign: null };
     if (!Number.isFinite(nowMs)) return result;
     this.repairCooldown(nowMs);
@@ -126,14 +126,15 @@ export class ShakeDetector {
     // 同一超阈值波瓣只算一个峰；跨零反向即使漏采低谷也可算新峰。
     if (this.activePeak?.axis === axis && this.activePeak.sign === sign) {
       this.activePeak.magnitude = Math.max(this.activePeak.magnitude, magnitude);
-      return result;
+    } else {
+      const peak: Peak = { at: nowMs, axis, sign, magnitude };
+      this.activePeak = peak;
+      result.peak = true;
+      if (nowMs >= this.cooldownUntil) this.peaks.push(peak);
     }
-    const peak: Peak = { at: nowMs, axis, sign, magnitude };
-    this.activePeak = peak;
-    result.peak = true;
-    // 冷却中仍通知首峰冻结倾斜，但不能积累下一次触发所需的峰。
-    if (nowMs < this.cooldownUntil) return result;
-    this.peaks.push(peak);
+    // 未就绪仍积累窗口和峰，警告出现后下一个有效高值样本即可触发；不消耗冷却。
+    // 冷却中不攒峰；是否响应首峰冻结倾斜由适配层按同一门控决定。
+    if (!armed || nowMs < this.cooldownUntil) return result;
     const reversals = this.reversals(this.peaks);
     if (this.peaks.length >= SHAKE.minPeaks && reversals >= SHAKE.minReversals) {
       const max = Math.max(...this.peaks.map((p) => p.magnitude));
@@ -152,10 +153,12 @@ export class ShakeSensor {
   private unsubscribeReset: () => void;
   private reportError: (error: unknown) => void;
   private enabled: () => boolean;
+  private armed: () => boolean;
   private onShake: (intensity: number, dominantSign: number | null) => void;
 
   constructor(tilt: TiltSensor, callbacks: {
     enabled: () => boolean;
+    armed: () => boolean;
     onPeak: () => void;
     onShake: (intensity: number, dominantSign: number | null) => void;
   }) {
@@ -165,12 +168,14 @@ export class ShakeSensor {
       else this.detector.resetMotion();
     });
     this.enabled = callbacks.enabled;
+    this.armed = callbacks.armed;
     this.onShake = callbacks.onShake;
     this.unsubscribe = tilt.subscribeMotion((event) => {
       this.safely(() => {
         if (!this.enabled()) { this.detector.resetMotion(); return; }
-        const result = this.detector.sample(event, performance.now());
-        if (result.peak) this.safely(callbacks.onPeak);
+        const armed = this.armed();
+        const result = this.detector.sample(event, performance.now(), armed);
+        if (armed && result.peak) this.safely(callbacks.onPeak);
         const intensity = result.intensity;
         if (intensity !== null) this.safely(() => this.onShake(intensity, result.dominantSign));
       });
@@ -183,7 +188,7 @@ export class ShakeSensor {
 
   simulate(intensity: number): void {
     this.safely(() => {
-      if (!this.enabled()) return;
+      if (!this.enabled() || !this.armed()) return;
       const accepted = this.detector.trigger(intensity, performance.now());
       if (accepted !== null) this.onShake(accepted, null);
     });

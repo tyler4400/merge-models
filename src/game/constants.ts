@@ -54,9 +54,9 @@ export const REST = {
 
 export const PHYS = {
   ballRestitution: 0.28,
-  ballFriction: 0.35,
+  ballFriction: 0.4,
   wallRestitution: 0.06,
-  wallFriction: 0.35,
+  wallFriction: 0.4,
   linearDamping: 0.1,
   angularDamping: 0.08,
   zSpring: 52,
