@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { TILT } from "./constants.ts";
+import { SHAKE, TILT } from "./constants.ts";
 import { TiltSensor } from "./tilt.ts";
+import { ShakeSensor } from "./shake.ts";
 
 let now = 0;
 let screenDeg = 0;
@@ -51,6 +52,74 @@ afterEach(() => {
 });
 
 describe("TiltSensor", () => {
+  it("摇晃首峰先于同帧倾斜更新，非游戏阶段不触发且可退订", () => {
+    const tilt = new TiltSensor();
+    let enabled = true;
+    let shakes = 0;
+    const sensor = new ShakeSensor(tilt, {
+      enabled: () => enabled,
+      onPeak: () => tilt.freeze(SHAKE.tiltFreezeSec),
+      onShake: () => { shakes++; },
+    });
+    const push = (x: number) => send("devicemotion", {
+      acceleration: { x, y: 0, z: 0 },
+      accelerationIncludingGravity: { x: -9.81, y: 0, z: 0 },
+    });
+    push(26);
+    tilt.tick(0.1);
+    near(tilt.theta, 0);
+    now = 100;
+    push(-26);
+    now = 200;
+    push(26);
+    assert.equal(shakes, 1);
+    sensor.simulate(0.8);
+    assert.equal(shakes, 1);
+    enabled = false;
+    now = 3000;
+    sensor.simulate(0.8);
+    push(-26);
+    now = 3100;
+    push(26);
+    enabled = true;
+    now = 3200;
+    push(-26);
+    assert.equal(shakes, 1);
+    sensor.dispose();
+    now = 3300;
+    push(26);
+    now = 3400;
+    push(-26);
+    assert.equal(shakes, 1);
+  });
+
+  it("摇晃复用 iOS 手势权限，监听开始前不接收事件，也不重复请求", async () => {
+    globalValue("navigator", { userAgent: "iPhone" });
+    let requests = 0;
+    const permission = { requestPermission: async () => { requests++; return "granted"; } };
+    globalValue("DeviceMotionEvent", permission);
+    globalValue("DeviceOrientationEvent", permission);
+    const tilt = new TiltSensor();
+    let peaks = 0;
+    const sensor = new ShakeSensor(tilt, {
+      enabled: () => true, onPeak: () => { peaks++; }, onShake: () => {},
+    });
+    const push = () => send("devicemotion", {
+      acceleration: { x: 26, y: 0, z: 0 }, accelerationIncludingGravity: null,
+    });
+    push();
+    assert.equal(peaks, 0);
+    assert.equal(requests, 0);
+    tilt.startFromGesture();
+    assert.equal(requests, 2);
+    await new Promise((resolve) => setImmediate(resolve));
+    push();
+    assert.equal(peaks, 1);
+    tilt.startFromGesture();
+    assert.equal(requests, 2);
+    sensor.dispose();
+  });
+
   it("无传感器桌面保持零倾角", () => {
     globalValue("navigator", { userAgent: "Desktop" });
     const sensor = new TiltSensor();

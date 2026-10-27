@@ -91,6 +91,28 @@ export const TILT = {
   standardAccelSign: -1, // Android/通用传感器报告支撑加速度，取反得到重力
 } as const;
 
+export const SHAKE = {
+  highPassSec: 0.1, // 含重力加速度回退的一阶高通时间常数（秒）
+  thresholdMs2: 17, // 超过此线加速度才计为峰（m/s²）
+  fullMs2: 35, // 强度映射到 1 的线加速度（m/s²）
+  windowMs: 500, // 峰与方向反转的统计窗口（毫秒）
+  minPeaks: 3, // 窗口内触发所需的最少峰数
+  minReversals: 2, // 窗口内主轴方向反转的最少次数
+  cooldownSec: 2, // 两次触发的最小间隔（秒）；v1 防刷分只靠冷却
+  impulse: 6, // 单位质量的基础向上冲量，即速度增量（m/s）
+  minStrength: 0.5, // 强度 0 对应的冲量倍率，强度 1 对应倍率 1
+  randomMin: 0.6, // 每颗球随机冲量倍率的下限
+  randomMax: 1.2, // 每颗球随机冲量倍率的上限
+  lateralRatio: 0.7, // 横向冲量相对竖直冲量的随机正负上限
+  maxDeltaV: 9, // 合成速度增量的长度上限（m/s）
+  topMargin: 0.15, // 按剩余上升空间限幅时预留的缸口距离（世界单位）
+  spinScale: 1.2, // 随机旋转强度
+  failPauseSec: 2.5, // 摇晃后暂停失败计时及触发的时间（秒）
+  tiltFreezeSec: 0.8, // 首峰及触发后冻结倾斜目标的时间（秒）
+  vibrateMs: [30, 40, 30], // 震动、间隔、震动时长（毫秒）
+  desktopIntensity: 0.8, // 桌面 KeyS 模拟摇晃的强度
+} as const;
+
 export const CAMERA = {
   targetY: (VIEW.yMin + VIEW.yMax) / 2,
   radius: 28,

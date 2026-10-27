@@ -8,7 +8,7 @@ import { Sfx } from "../audio/Sfx";
 import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
 import { TokenLayer } from "./TokenLayer";
-import { DROP, GRAVITY_Y, MERGE_POP, REST, TILT, VIEW } from "./constants";
+import { DROP, GRAVITY_Y, MERGE_POP, REST, SHAKE, TANK, TILT, VIEW } from "./constants";
 import { FailLine } from "./failLine";
 import { HammerStock, ShatterFx, canSmash } from "./hammer";
 import { planMerge } from "./merge";
@@ -17,6 +17,7 @@ import { firstT800Bonus, mergePoints, t800PairBonus } from "./scoring";
 import { createSpawnQueue, type SpawnQueue } from "./spawn";
 import { getTier, type TierId } from "./tiers";
 import { TiltSensor } from "./tilt";
+import { ShakeSensor } from "./shake";
 
 export type Phase = "title" | "playing" | "won" | "dead" | "hammerAim";
 
@@ -59,6 +60,8 @@ export class Game {
   readonly tilt = new TiltSensor();
   private lastWakeTheta = 0;
   private wakeClock = 0;
+  private readonly shake: ShakeSensor;
+  private shakeFailPause = 0;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
     this.scene = scene;
@@ -76,6 +79,11 @@ export class Game {
       onContinue: () => this.continueScore(),
       onRestart: () => this.restart(),
       onHammer: () => this.toggleHammer(),
+    });
+    this.shake = new ShakeSensor(this.tilt, {
+      enabled: () => this.phase === "playing" || this.phase === "hammerAim",
+      onPeak: () => this.tilt.freeze(SHAKE.tiltFreezeSec),
+      onShake: (intensity) => this.applyShake(intensity),
     });
 
     this.plugin.onCollisionObservable.add((ev) => {
@@ -191,7 +199,9 @@ export class Game {
     if (this.phase === "playing" || this.phase === "hammerAim") {
       const { warn, failed } = this.fail.tick(dt, this.balls, {
         holdScale: Math.abs(theta) >= TILT.failGraceDeg * Math.PI / 180 ? TILT.failHoldScale : 1,
+        paused: this.shakeFailPause > 0,
       });
+      this.shakeFailPause = Math.max(0, this.shakeFailPause - dt);
       this.hud.setWarn(warn);
       this.sfx.setAlarm(warn);
       if (failed) this.lose();
@@ -210,6 +220,30 @@ export class Game {
     if (!this.hammers.canUse()) return;
     this.phase = "hammerAim";
     this.hud.setHammers(this.hammers.left, true);
+  }
+
+  private applyShake(intensity: number): void {
+    if (this.phase !== "playing" && this.phase !== "hammerAim") return;
+    this.tilt.freeze(SHAKE.tiltFreezeSec);
+    this.shakeFailPause = SHAKE.failPauseSec;
+    const strength = SHAKE.minStrength + (1 - SHAKE.minStrength) * intensity;
+    const gravityY = Math.abs(GRAVITY_Y) * Math.cos(TILT.maxDeg * Math.PI / 180);
+    for (const ball of this.balls) {
+      const body = ball.body;
+      if (ball.held || ball.merging || !body) continue;
+      const dy = SHAKE.impulse * strength * (SHAKE.randomMin + Math.random() * (SHAKE.randomMax - SHAKE.randomMin));
+      const dx = dy * (Math.random() * 2 - 1) * SHAKE.lateralRatio;
+      // 用最弱竖直重力估算上升空间，并计入已有向上速度，避免把顶层球抛出缸口。
+      const headroom = Math.max(0, TANK.innerHeight - SHAKE.topMargin - ball.topY());
+      const safeDy = Math.max(0, Math.sqrt(2 * gravityY * headroom) - Math.max(0, body.getLinearVelocity().y));
+      const scale = Math.min(1, SHAKE.maxDeltaV / Math.hypot(dx, dy), safeDy / dy);
+      // applyImpulse 会唤醒睡眠刚体；质量相乘使各级球获得同量级速度增量。
+      body.applyImpulse(new Vector3(dx * scale * ball.mass, dy * scale * ball.mass, 0), ball.mesh.getAbsolutePosition());
+      ball.nudgeSpin(SHAKE.spinScale);
+    }
+    try { navigator.vibrate?.([...SHAKE.vibrateMs]); } catch { /* iOS 等不支持震动时跳过。 */ }
+    this.sfx.collide(SHAKE.impulse * strength);
+    this.hud.toast("晃起来啦！");
   }
 
   /** PhysicsBody 无显式 wake API；极小向下冲量只用于唤醒，不叠加横向力。 */
@@ -246,6 +280,8 @@ export class Game {
     this.lastWakeTheta = 0;
     this.wakeClock = 0;
     this.elapsed = 0;
+    this.shakeFailPause = 0;
+    this.shake.detector.resetMotion();
     if (full) {
       this.score = 0;
       this.cleared = false;
@@ -435,6 +471,10 @@ export class Game {
       } else if (e.code === "Space") {
         e.preventDefault();
         if (!e.repeat && this.phase === "playing") this.tryDrop();
+      } else if (e.code === "KeyS" && (this.phase === "playing" || this.phase === "hammerAim")) {
+        // 桌面 S 键模拟摇晃，和手机共用两秒冷却；长按重复事件不触发。
+        e.preventDefault();
+        if (!e.repeat) this.shake.simulate(SHAKE.desktopIntensity);
       }
     });
     window.addEventListener("keyup", (e) => {

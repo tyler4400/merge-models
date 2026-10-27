@@ -53,6 +53,7 @@ export class TiltSensor {
   private lastMotionAt = -Infinity;
   private lastSensorAt = -Infinity;
   private genericAccel: GenericAccel | null = null;
+  private motionListeners = new Set<(e: DeviceMotionEvent) => void>();
 
   constructor() {
     // Android 无权限弹窗，保留构造时直接监听。
@@ -76,6 +77,12 @@ export class TiltSensor {
   /** 冻结期间不接收新目标；已有倾角继续平滑靠近原目标。 */
   freeze(sec: number): void {
     if (Number.isFinite(sec)) this.frozenSec = Math.max(this.frozenSec, sec, 0);
+  }
+
+  /** 复用 listen() 的权限与事件；先通知订阅者，使首峰能冻结本次倾斜更新。 */
+  subscribeMotion(listener: (e: DeviceMotionEvent) => void): () => void {
+    this.motionListeners.add(listener);
+    return () => { this.motionListeners.delete(listener); };
   }
 
   tick(dt: number): void {
@@ -146,6 +153,7 @@ export class TiltSensor {
   }
 
   private onMotion(e: DeviceMotionEvent): void {
+    for (const listener of this.motionListeners) listener(e);
     const g = e.accelerationIncludingGravity;
     if (!g || !validXY(g.x, g.y)) return;
     // 平放也算有效主数据，防止回退抢占造成抖动。
