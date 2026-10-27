@@ -90,6 +90,7 @@ export class Game {
     });
     this.shake = new ShakeSensor(this.tilt, {
       enabled: () => this.phase === "playing" || this.phase === "hammerAim",
+      armed: () => this.shakeArmed(),
       onPeak: () => this.tilt.freeze(SHAKE.tiltFreezeSec),
       onShake: (intensity, dominantSign) => this.applyShake(intensity, dominantSign),
     });
@@ -167,6 +168,7 @@ export class Game {
 
   getDiagnostics() {
     return Object.freeze({ phase: this.phase, shakeFailPause: this.shakeFailPause,
+      armed: this.shakeArmed(), warning: this.fail.warning,
       tilt: this.tilt.getDiagnostics(), shake: this.shake.detector.getDiagnostics() });
   }
 
@@ -253,9 +255,13 @@ export class Game {
     this.hud.setHammers(this.hammers.left, true);
   }
 
+  private shakeArmed(): boolean {
+    // FailLine.warning 与 tick 中 hud.setWarn(warn) 的红色警告同源，不另算阈值。
+    return (this.phase === "playing" || this.phase === "hammerAim") && this.fail.warning;
+  }
+
   private applyShake(intensity: number, dominantSign: number | null = null): void {
-    if (this.phase !== "playing" && this.phase !== "hammerAim") return;
-    this.hud.toast("晃起来啦！"); // 物理/音效异常也不能吞掉识别成功的反馈。
+    if (!this.shakeArmed()) return;
     this.tilt.freeze(SHAKE.tiltFreezeSec);
     this.shakeFailPause = SHAKE.failPauseSec;
     this.syncActivation(true);
@@ -331,6 +337,7 @@ export class Game {
     for (const b of [...this.balls]) this.removeBall(b);
     this.held?.dispose();
     this.held = null;
+    this.fail.warning = false;
     this.hud.setWarn(false);
     this.balls = [];
     this.idMap.clear();
@@ -673,6 +680,7 @@ export class Game {
     this.hud.setScore(this.score);
     this.sfx.win();
     this.sfx.setAlarm(false);
+    this.fail.warning = false;
     this.hud.setWarn(false);
     this.hud.setHammers(this.hammers.left, false);
     this.phase = "won";
@@ -686,6 +694,7 @@ export class Game {
     this.phase = "dead";
     this.freeze = true;
     this.sfx.setAlarm(false);
+    this.fail.warning = false;
     this.hud.setWarn(false);
     this.hud.setHammers(this.hammers.left, false);
     this.hud.showLose(this.score, this.elapsed, this.hammers.left);
