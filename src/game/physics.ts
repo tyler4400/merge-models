@@ -1,5 +1,5 @@
 /** Invisible Havok box walls. The painted jar lives on the courtyard backdrop. */
-import { Color3, Quaternion, Vector3 } from "@babylonjs/core/Maths/math";
+import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -93,20 +93,18 @@ export function clampDropX(x: number, radius: number): number {
   return clamp(x, -limit, limit);
 }
 
+/** z 越界时一步（约 1/60s）拉回所需的速度增益。 */
+const Z_SNAP_PER_SEC = 60;
+
 export function keepInLane(body: PhysicsBody): void {
-  const node = body.transformNode;
-  const p = node.getAbsolutePosition();
+  const p = body.transformNode.getAbsolutePosition();
   const v = body.getLinearVelocity();
   const z = clamp(p.z, -PHYS.zClamp, PHYS.zClamp);
-  if (Math.abs(p.z - z) > 1e-4) {
-    const pos = p.clone();
-    pos.z = z;
-    const rot =
-      node.rotationQuaternion?.clone() ??
-      Quaternion.FromEulerAngles(node.rotation.x, node.rotation.y, node.rotation.z);
-    body.setTargetTransform(pos, rot);
-  }
-  if (v.z !== 0) body.setLinearVelocity(new Vector3(v.x, v.y, 0));
+  // 只用 z 速度把球拉回薄层，保留 x/y 速度。
+  // 旧实现用 setTargetTransform，会把整条线速度改成“一步到目标”，
+  // 挤在薄层边缘的球因此每帧丢掉摇晃冲量和倾斜滚动（无头 Chrome 实测：|z|≥0.18 的球冲量后 vy≈0）。
+  const vz = Math.abs(p.z - z) > 1e-4 ? (z - p.z) * Z_SNAP_PER_SEC : 0;
+  if (v.z !== vz) body.setLinearVelocity(new Vector3(v.x, v.y, vz));
 }
 
 export const isBodySettled = bodySettled;

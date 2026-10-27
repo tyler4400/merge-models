@@ -4,11 +4,13 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import type { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import { HavokPlugin as HavokPluginCtor } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
+import { PhysicsActivationControl } from "@babylonjs/core/Physics/v2/IPhysicsEnginePlugin";
 import { Sfx } from "../audio/Sfx";
 import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
 import { TokenLayer } from "./TokenLayer";
-import { DROP, GRAVITY_Y, MERGE_POP, REST, VIEW } from "./constants";
+import { DROP, ESCAPE, GRAVITY_Y, MERGE_POP, REST, SHAKE, TILT, VIEW, clamp } from "./constants";
+import { isPerchedOnRim, shouldDestroyEscaped } from "./escape";
 import { FailLine } from "./failLine";
 import { HammerStock, ShatterFx, canSmash } from "./hammer";
 import { planMerge } from "./merge";
@@ -17,6 +19,7 @@ import { firstT800Bonus, mergePoints, t800PairBonus } from "./scoring";
 import { createSpawnQueue, type SpawnQueue } from "./spawn";
 import { getTier, type TierId } from "./tiers";
 import { TiltSensor } from "./tilt";
+import { ShakeSensor, createShakePulse, jitterShakePulse, sloshPulse } from "./shake";
 
 export type Phase = "title" | "playing" | "won" | "dead" | "hammerAim";
 
@@ -57,6 +60,16 @@ export class Game {
   private inputBound = false;
   private lastPointer: PointerEvent | null = null;
   readonly tilt = new TiltSensor();
+  private lastWakeTheta = 0;
+  private wakeClock = 0;
+  private readonly shake: ShakeSensor;
+  private shakeFailPause = 0;
+  /** 当前被设为 ALWAYS_ACTIVE 的球 id。 */
+  private awakeIds = new Set<number>();
+  /** 停在侧墙顶上的累计时间（秒），按球 id。 */
+  private perchClock = new Map<number, number>();
+  private lastDt = 0;
+  private slosh: { remaining: number; pulses: Array<{ ball: Ball; dx: number }> } | null = null;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
     this.scene = scene;
@@ -74,6 +87,21 @@ export class Game {
       onContinue: () => this.continueScore(),
       onRestart: () => this.restart(),
       onHammer: () => this.toggleHammer(),
+    });
+    this.shake = new ShakeSensor(this.tilt, {
+      enabled: () => this.phase === "playing" || this.phase === "hammerAim",
+      onPeak: () => this.tilt.freeze(SHAKE.tiltFreezeSec),
+      onShake: (intensity, dominantSign) => this.applyShake(intensity, dominantSign),
+    });
+
+    const unsubscribeReset = this.tilt.subscribeReset((resumed) => {
+      if (resumed) this.clearShakeEffects();
+    });
+    scene.onDisposeObservable.add(() => {
+      unsubscribeReset();
+      this.clearShakeEffects();
+      this.shake.dispose();
+      this.tilt.dispose();
     });
 
     this.plugin.onCollisionObservable.add((ev) => {
@@ -137,13 +165,34 @@ export class Game {
     if (!this.held) this.spawnHeld();
   }
 
+  getDiagnostics() {
+    return Object.freeze({ phase: this.phase, shakeFailPause: this.shakeFailPause,
+      tilt: this.tilt.getDiagnostics(), shake: this.shake.detector.getDiagnostics() });
+  }
+
   tick(dtMs: number): void {
     const dt = Math.min(dtMs / 1000, 0.05);
+    this.lastDt = dt;
     this.tilt.tick(dt);
     const live = this.phase === "playing" || this.phase === "hammerAim";
-    const gx = live ? this.tilt.gx : 0;
-    this.plugin.setGravity(new Vector3(gx, GRAVITY_Y, 0));
-    if (gx !== 0) this.wakePile(gx);
+    this.removeEscapedBalls();
+    if (live) this.stepShakeEffects(dt);
+    else this.clearShakeEffects();
+    const theta = live ? this.tilt.theta : 0;
+    // Havok 会让静止球堆睡眠；睡眠刚体不响应 applyImpulse，也不随重力方向改变而滚动。
+    // 实测（无头 Chrome）：在同一帧把睡眠球切到常醒再施冲量，冲量会丢失。
+    // 所以游戏进行中缸内球一直常醒（球数很少，开销可忽略）；离开游戏阶段交还模拟控制。
+    this.syncActivation(live);
+    const gravity = Math.abs(GRAVITY_Y);
+    this.plugin.setGravity(new Vector3(gravity * Math.sin(theta), -gravity * Math.cos(theta), 0));
+    this.wakeClock += dt;
+    if (Math.abs(theta - this.lastWakeTheta) > TILT.wakeDeltaDeg * Math.PI / 180 ||
+      (theta !== 0 && this.wakeClock >= TILT.wakeIntervalSec)) {
+      // 回到竖直或退出游戏时也唤醒一次，让球适应恢复后的重力。
+      this.wakePile();
+      this.lastWakeTheta = theta;
+      this.wakeClock = 0;
+    }
     this.shatter.tick(dt);
     this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
@@ -179,7 +228,11 @@ export class Game {
     this.flushMerges();
 
     if (this.phase === "playing" || this.phase === "hammerAim") {
-      const { warn, failed } = this.fail.tick(dt, this.balls);
+      const { warn, failed } = this.fail.tick(dt, this.balls, {
+        holdScale: Math.abs(theta) >= TILT.failGraceDeg * Math.PI / 180 ? TILT.failHoldScale : 1,
+        paused: this.shakeFailPause > 0,
+      });
+      this.shakeFailPause = Math.max(0, this.shakeFailPause - dt);
       this.hud.setWarn(warn);
       this.sfx.setAlarm(warn);
       if (failed) this.lose();
@@ -200,13 +253,72 @@ export class Game {
     this.hud.setHammers(this.hammers.left, true);
   }
 
-  /** Havok sleeps settled bodies; world gravity X alone will not start a pile sliding. */
-  private wakePile(gx: number): void {
+  private applyShake(intensity: number, dominantSign: number | null = null): void {
+    if (this.phase !== "playing" && this.phase !== "hammerAim") return;
+    this.hud.toast("晃起来啦！"); // 物理/音效异常也不能吞掉识别成功的反馈。
+    this.tilt.freeze(SHAKE.tiltFreezeSec);
+    this.shakeFailPause = SHAKE.failPauseSec;
+    this.syncActivation(true);
+    const pulse = createShakePulse(intensity, dominantSign);
+    const pulses: Array<{ ball: Ball; dx: number }> = [];
+    for (const ball of this.balls) {
+      const body = ball.body;
+      if (ball.held || ball.merging || !body) continue;
+      const velocity = jitterShakePulse(pulse);
+      // applyImpulse 会唤醒睡眠刚体；质量相乘使各级球获得同量级速度增量。
+      body.applyImpulse(new Vector3(velocity.x * ball.mass, velocity.y * ball.mass, 0), ball.mesh.getAbsolutePosition());
+      pulses.push({ ball, dx: sloshPulse(velocity).x });
+      ball.nudgeSpin(SHAKE.spinScale);
+    }
+    this.slosh = SHAKE.sloshEnabled ? { remaining: SHAKE.sloshDelayMs / 1000, pulses } : null;
+    try { navigator.vibrate?.([...SHAKE.vibrateMs]); } catch { /* iOS 等不支持震动时跳过。 */ }
+    this.sfx.collide(pulse.y);
+  }
+
+  private stepShakeEffects(dt: number): void {
+    if (this.slosh) {
+      this.slosh.remaining -= dt;
+      if (this.slosh.remaining <= 0) {
+        for (const { ball, dx } of this.slosh.pulses) {
+          // 首脉冲后已合成/砸碎的球不再施力，也不把旧脉冲转移给新球。
+          if (!this.idMap.has(ball.id) || ball.held || ball.merging || !ball.body) continue;
+          ball.body.applyImpulse(new Vector3(dx * ball.mass, 0, 0), ball.mesh.getAbsolutePosition());
+        }
+        this.slosh = null;
+      }
+    }
+  }
+
+  private syncActivation(awake: boolean): void {
+    for (const ball of this.balls) {
+      const body = ball.body;
+      if (ball.held || ball.merging || !body) continue;
+      if (this.awakeIds.has(ball.id) === awake) continue;
+      try {
+        this.plugin.setActivationControl(
+          body,
+          awake ? PhysicsActivationControl.ALWAYS_ACTIVE : PhysicsActivationControl.SIMULATION_CONTROLLED,
+        );
+        if (awake) this.awakeIds.add(ball.id);
+        else this.awakeIds.delete(ball.id);
+      } catch {
+        /* body gone */
+      }
+    }
+  }
+
+  private clearShakeEffects(): void {
+    this.slosh = null;
+    this.shakeFailPause = 0;
+  }
+
+  /** PhysicsBody 无显式 wake API；极小向下冲量只用于唤醒，不叠加横向力。 */
+  private wakePile(): void {
     for (const ball of this.balls) {
       if (ball.held || ball.merging || !ball.body) continue;
       try {
         const p = ball.mesh.getAbsolutePosition();
-        ball.body.applyForce(new Vector3(gx * ball.mass, 0, 0), p);
+        ball.body.applyImpulse(new Vector3(0, -TILT.wakeImpulsePerMass * ball.mass, 0), p);
       } catch {
         /* body gone */
       }
@@ -214,6 +326,8 @@ export class Game {
   }
 
   private resetRun(full: boolean): void {
+    this.clearShakeEffects();
+    this.dropLock = 0;
     for (const b of [...this.balls]) this.removeBall(b);
     this.held?.dispose();
     this.held = null;
@@ -231,7 +345,11 @@ export class Game {
     this.pendingSettledFor = 0;
     this.freeze = false;
     this.timing = false;
+    this.lastWakeTheta = 0;
+    this.wakeClock = 0;
     this.elapsed = 0;
+    this.shakeFailPause = 0;
+    this.shake.detector.resetMotion();
     if (full) {
       this.score = 0;
       this.cleared = false;
@@ -253,9 +371,41 @@ export class Game {
   private removeBall(ball: Ball): void {
     if (ball.body) this.bodyMap.delete(ball.body);
     this.idMap.delete(ball.id);
+    this.awakeIds.delete(ball.id);
+    this.perchClock.delete(ball.id);
     this.balls = this.balls.filter((b) => b.id !== ball.id);
     if (this.held?.id === ball.id) this.held = null;
+    if (this.pending?.id === ball.id) {
+      this.pending = null;
+      this.pendingAge = 0;
+      this.pendingSettledFor = 0;
+    }
+    this.mergeQueue = this.mergeQueue.filter(([a, b]) => a.id !== ball.id && b.id !== ball.id);
     ball.dispose();
+  }
+
+  private removeEscapedBalls(): void {
+    for (const ball of this.balls) {
+      if (ball.held || ball.merging || !ball.body) continue;
+      const at = ball.mesh.getAbsolutePosition();
+      let escaped = shouldDestroyEscaped(at);
+      if (!escaped && SHAKE.destroyEscaped) {
+        const v = ball.body.getLinearVelocity();
+        const perched = isPerchedOnRim(at, Math.hypot(v.x, v.y));
+        const t = perched ? (this.perchClock.get(ball.id) ?? 0) + this.lastDt : 0;
+        if (t > 0) this.perchClock.set(ball.id, t);
+        else this.perchClock.delete(ball.id);
+        escaped = t >= ESCAPE.perchSec;
+      }
+      if (!escaped) continue;
+      // 只钳制特效快照，不移动刚体；屏幕外碎裂也能在最近的可视边缘看到。
+      const visibleAt = at.clone();
+      visibleAt.x = clamp(at.x, -VIEW.halfW, VIEW.halfW);
+      visibleAt.y = clamp(at.y, VIEW.yMin, VIEW.yMax);
+      this.tokens.burst(ball, visibleAt);
+      this.sfx.shatter();
+      this.removeBall(ball);
+    }
   }
 
   private canDrop(): boolean {
@@ -324,7 +474,6 @@ export class Game {
     if (!this.hammers.consume()) return;
     this.tokens.burst(ball);
     this.sfx.shatter();
-    if (this.pending?.id === ball.id) this.pending = null;
     this.removeBall(ball);
     this.phase = "playing";
     this.smashLock = 0.4;
@@ -421,6 +570,10 @@ export class Game {
       } else if (e.code === "Space") {
         e.preventDefault();
         if (!e.repeat && this.phase === "playing") this.tryDrop();
+      } else if (e.code === "KeyS" && (this.phase === "playing" || this.phase === "hammerAim")) {
+        // 桌面 S 键模拟摇晃，和手机共用两秒冷却；长按重复事件不触发。
+        e.preventDefault();
+        if (!e.repeat) this.shake.simulate(SHAKE.desktopIntensity);
       }
     });
     window.addEventListener("keyup", (e) => {
@@ -434,6 +587,7 @@ export class Game {
     const pairs = this.mergeQueue;
     this.mergeQueue = [];
     for (const [a, b] of pairs) {
+      if (!this.idMap.has(a.id) || !this.idMap.has(b.id) || a.merging || b.merging) continue;
       if (seen.has(a.id) || seen.has(b.id)) continue;
       if (!planMerge(a, b)) continue;
       seen.add(a.id);
@@ -488,6 +642,7 @@ export class Game {
   private stepMergeFx(dt: number): void {
     for (let i = this.fades.length - 1; i >= 0; i--) {
       const f = this.fades[i];
+      if (!this.idMap.has(f.ball.id)) { this.fades.splice(i, 1); continue; }
       f.t += dt;
       const s = Math.max(0, 1 - f.t / 0.16);
       f.ball.mesh.scaling.setAll(s);
@@ -498,6 +653,7 @@ export class Game {
     }
     for (let i = this.grows.length - 1; i >= 0; i--) {
       const g = this.grows[i];
+      if (!this.idMap.has(g.ball.id) || g.ball.merging) { this.grows.splice(i, 1); continue; }
       g.t += dt;
       const x = Math.min(1, g.t / 0.28);
       const c1 = 1.70158;
@@ -511,6 +667,7 @@ export class Game {
     }
   }
   private winFirst(): void {
+    this.clearShakeEffects();
     this.cleared = true;
     this.score += firstT800Bonus(this.elapsed);
     this.hud.setScore(this.score);
@@ -525,6 +682,7 @@ export class Game {
   }
 
   private lose(): void {
+    this.clearShakeEffects();
     this.phase = "dead";
     this.freeze = true;
     this.sfx.setAlarm(false);
