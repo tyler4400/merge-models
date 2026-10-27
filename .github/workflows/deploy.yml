@@ -1,55 +1,113 @@
+# 腾讯云这条线：push → GitHub 临时 Ubuntu 机器构建 Docker 镜像 → 推到 GHCR（ghcr.io）
+# → SSH 登录腾讯云 CVM → 服务器拉取镜像并重启服务。
+# Cloudflare Workers 那条线由 Workers Builds 单独运行，不经过 GHCR。
+# name 是 Actions 页面显示的工作流名称。
 name: 自动部署新版本到服务器
 
+# on 定义触发条件；下面任一条件满足即可启动工作流。
 on:
   push:
+    # push 到 master 分支时触发。
     branches: [master]
+    # 推送任何 tag 都触发，例如 v0.4.0；这里的 tag 是 Git 标签。
     tags: ['*']
+    # paths-ignore: ['**.md']  # 可选：分支推送若只改 Markdown 则跳过；标签推送不检查路径。
+  # 在 Actions 页面点击 Run workflow 按钮，也可手动运行。
   workflow_dispatch:
 
+# 并发控制：同一 group 最多一个正在运行的任务，另可保留一个待运行任务。
 concurrency:
+  # 腾讯云部署共用这个组，避免多次部署同时操作服务器。
   group: deploy-cvm
+  # 新运行到来时取消正在跑的旧运行；2026-10-27 合并 PR #2 的运行就被下一次 push 这样取消。
   cancel-in-progress: true
 
+# 为自动提供的 GITHUB_TOKEN 声明最小权限。
 permissions:
+  # 只读仓库代码，供 checkout 使用。
   contents: read
+  # 允许把镜像推送到 GitHub Container Registry（GHCR）。
   packages: write
 
+# 工作流环境变量：REGISTRY 和 IMAGE 虽已定义，但下面没有引用，实际地址都是写死的。
 env:
+  # 镜像仓库服务的域名。
   REGISTRY: ghcr.io
+  # 镜像完整名称，不含版本标签。
   IMAGE: ghcr.io/tyler4400/merge-models
 
+# jobs 定义作业；本工作流只有 deploy 一个作业，steps 按顺序执行。
 jobs:
   deploy:
+    # GitHub 托管的临时虚拟机，作业结束后销毁。
+    # ubuntu-latest 是会迁移的标签（本次教学记录：正在迁到 Ubuntu 26）；要固定可写 ubuntu-24.04 等具体版本。
     runs-on: ubuntu-latest
+    # timeout-minutes: 20  # 可选：限制整个作业最多运行 20 分钟。
     steps:
+      # checkout：把当前触发版本的仓库代码下载到临时机器。
       - uses: actions/checkout@v4
+      # login-action：用 GITHUB_TOKEN 登录 ghcr.io，让后续构建步骤能够推送镜像。
       - uses: docker/login-action@v3
         with:
+          # 登录目标是 GHCR。
           registry: ghcr.io
+          # github.actor 是触发这次工作流的用户名。
           username: ${{ github.actor }}
+          # secrets.GITHUB_TOKEN 是 GitHub 为本次作业自动提供的临时令牌。
           password: ${{ secrets.GITHUB_TOKEN }}
+      # setup-buildx：准备基于 BuildKit 的构建器，支持导出构建缓存。
       - uses: docker/setup-buildx-action@v3
+      # build-push-action：构建 Docker 镜像，并按下面的配置推送和读写缓存。
       - uses: docker/build-push-action@v6
         with:
+          # 以仓库根目录为构建上下文，默认使用根目录 Dockerfile。
+          # 多阶段构建：先在 node:22-alpine 中执行 npm ci 和 npm run build，
+          # 再把构建产物 dist 拷入 nginx:1.27-alpine，不携带 Node 构建环境，镜像更小。
           context: .
+          # 构建完成后推送镜像到 GHCR。
           push: true
+          # platforms: linux/amd64  # 可选：明确指定目标镜像的 CPU 平台。
+          # 同一镜像有两个标签：github.sha 对应本次提交，各版保留便于回滚；latest 每次覆盖。
+          # 这里的镜像标签与上面触发工作流的 Git tag 是两个概念。
           tags: |
             ghcr.io/tyler4400/merge-models:${{ github.sha }}
             ghcr.io/tyler4400/merge-models:latest
+          # type=gha：从 GitHub Actions 缓存读取之前的构建层。
           cache-from: type=gha
+          # 把构建缓存写回；mode=max 连中间阶段也缓存，依赖没变且缓存命中就不用重新 npm ci。
           cache-to: type=gha,mode=max
+      # SSH 连接腾讯云 CVM，在远端执行部署脚本。
       - name: 服务器拉取并启动
         uses: appleboy/ssh-action@v1.2.5
         with:
+          # 服务器地址、SSH 用户和 RSA 私钥分别来自仓库 Secrets：HOST、SSH_USER、RSA_PRIVATE_KEY。
           host: ${{ secrets.HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.RSA_PRIVATE_KEY }}
+          # port: 22  # 可选：显式指定 SSH 端口，默认是 22。
+          # script_stop 在 appleboy/ssh-action v1.2.5 已不是有效输入，只会警告、不起作用。
+          # 此处保留原配置；下面的 set -euo pipefail 已负责出错即停。
           script_stop: true
+          # 远端脚本最长执行 10 分钟；与整个作业的 timeout-minutes 不同。
           command_timeout: 10m
+          # 竖线表示多行字符串；块内内容（包括整行 shell 注释）会传到远端 shell。
           script: |
+            # -e：命令出错即停；-u：引用未定义变量时报错；-o pipefail：管道任一段失败则管道失败。
             set -euo pipefail
+            # GHCR 包目前是私有的，服务器也需用 GITHUB_TOKEN 登录；令牌在 job 结束时失效。
+            # --password-stdin 从标准输入读取令牌；github.actor 作为登录用户名。
+            # 2026-10-27 失败记录：国内服务器拉 ghcr.io 太慢，卡了 5 分多钟，
+            # 仓库临时通行证随后过期，重试得到 pull access denied。
+            # 若把包设为公开，服务器即可匿名拉取，届时这条 docker login 可删除。
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # 创建部署目录；-p 会补齐父目录，目录已存在也不会报错。
             mkdir -p /root/merge-models
+            # 每次重写 Compose 文件，让服务器配置以仓库为准（仓库是唯一真相）。
+            # cat 到 EOF 之间是原样写入文件的 heredoc 内容，不在其中插入教学注释。
+            # name：Compose 项目名称；services：服务集合；web：其中的 Web 服务名称。
+            # image：拉取 GHCR 中标记为 latest 的镜像；container_name：固定容器名称。
+            # ports 的 18447:80：宿主机 18447 端口 → 容器内 nginx 的 80 端口。
+            # restart: unless-stopped：自动重启容器，但手动停止后保持停止。
             cat > /root/merge-models/docker-compose.yml <<EOF
             name: merge-models
             services:
@@ -60,8 +118,16 @@ jobs:
                   - "18447:80"
                 restart: unless-stopped
             EOF
+            # 进入部署目录，让 docker compose 默认读取这里的 docker-compose.yml。
             cd /root/merge-models
+            # 拉取 Compose 文件声明的镜像，取得最新的 latest 内容；失败会让脚本停止。
+            # 可选重试示例（未启用）：最多尝试 3 次，失败后等待 10 秒，成功则退出循环。
+            # for i in 1 2 3; do docker compose pull && break; sleep 10; done
+            # 注意：示例耗尽重试后可能返回 sleep 的成功状态；实际启用时还需检查最终拉取是否成功。
             docker compose pull
+            # -d：后台运行；--force-recreate：强制重建容器，使用刚拉取的镜像。
             docker compose up -d --force-recreate
+            # 删除服务器上本次 GHCR 登录凭据；|| true 表示注销失败也不让脚本停止。
             docker logout ghcr.io || true
+            # -f：无需交互确认，清理悬空的旧镜像（无标签且未被容器使用），释放磁盘空间。
             docker image prune -f

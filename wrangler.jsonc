@@ -14,8 +14,9 @@
   // 官方默认：没写 routes 时为 true；像我们这样写了 routes 时默认就是 false（只能走自定义域名）。
   // 想在自定义域名之外再留一个 workers.dev 备用网址，就取消下一行注释。
   // "workers_dev": true,
-  // 可选：false 表示关闭每个版本的预览 URL；与上面的普通 workers.dev 入口分别控制。
-  // "preview_urls": false,
+  // 开启 workers.dev 预览地址：分支预览/版本可通过 <预览名>-merge-models.<账户子域>.workers.dev 访问。
+  // 只管预览和版本 URL，不会打开正式环境的 workers.dev（上面 workers_dev 仍未开启）；正式域名 merge-models.tyler4400.com 不变。
+  "preview_urls": true,
   // 可选：自定义 Worker 脚本入口；纯静态游戏无需 main，启用前需创建对应文件。
   // "main": "worker/index.ts",
   // 可选：运行时兼容标志列表；空数组表示不额外开启标志，具体标志须查运行时文档。
@@ -87,6 +88,21 @@
     // Vite 默认把生产构建输出到 dist；相对于本配置文件，部署前先执行 npm run build。
     "directory": "./dist"
   // 结束 assets 对象，下面继续配置访问域名。
+  },
+  // Worker Previews 配置：推送到 master 以外的分支时，Workers Builds 会跑 npx wrangler preview 生成预览版本。
+  // 顶层字段就是正式环境；previews 块里只放「仅预览生效」的设置，没有这个块 wrangler preview 会直接报错。
+  // 预览不继承顶层的 vars、绑定（KV、R2、D1 等）和 secrets，需要的话必须在这里单独声明。
+  // assets、compatibility_date 等仍写在顶层，预览照样使用，不用在这里重复。
+  // 不要把 routes 或 merge-models.tyler4400.com 自定义域名放进来，否则预览会去抢正式域名。
+  // 本游戏是纯静态站点，没有 vars、绑定或 secrets，所以空块 {} 就够了。
+  "previews": {
+    // 可选：预览专用的普通变量，用来让 Worker 知道自己跑在预览里；纯静态站点用不上。
+    // "vars": { "ENVIRONMENT": "preview" },
+    // 可选：预览单独开启日志，方便排查预览版本，不影响正式环境的日志设置。
+    // "observability": { "enabled": true },
+    // 可选：预览用独立的 KV 命名空间，避免测试数据写进正式数据；id 需先在 Cloudflare 创建。
+    // "kv_namespaces": [{ "binding": "MY_KV", "id": "<预览用的 KV id>" }]
+  // 结束 previews 块；当前生效内容为空，用逗号连接下面的 routes。
   },
   // 部署路由列表：这里只声明正式站点的自定义域名；dry-run 不会绑定或修改域名。
   "routes": [
