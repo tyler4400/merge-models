@@ -65,7 +65,7 @@ Havok 直接用 `await HavokPhysics()` 初始化。Vite 根据包内的 `new URL
 3. 两颗同级碰到变成下一级，中央 toast 显示名字。
 4. 第一次做出 T-800 即通关结算。可选「继续刷分」或「再来一局」。
 5. 堆住的球顶越过警戒线约 2 秒即失败。刚落下 0.8 秒内、以及还在下落穿过红线的，不亮警告。
-6. 点底栏剪枝剪，再点一颗已落地的球砸碎（全局限 3 次）。点空处取消；点到还不能砸的球继续瞄准。
+6. 点底栏锤子，再点一颗已落地的球砸碎（全局限 3 次）。点空处取消；点到还不能砸的球继续瞄准。
 
 桌面：A / D 或方向键或鼠标移动；点击 / 空格投放。
 手机：手指拖动手持球，松手投放。画布禁止滚动和缩放。
@@ -87,7 +87,7 @@ src/
     spawn.ts              下一颗队列，仅 1-4 级，权重 35/30/20/15
     physics.ts            Havok 隐形盒墙；罐子是关卡贴图
     merge.ts              同级接触 → 下一级上弹；两颗 T-800 消失
-    hammer.ts             3 把剪枝剪：瞄准 → 点已落地的球 → 碎裂 VFX
+    hammer.ts             3 把锤子：瞄准 → 点已落地的球 → 碎裂 VFX
     failLine.ts           堆住靠近变红 + 警报；越线约 2s 失败
     TokenLayer.ts         2D 圆片层：图标铺满 + 分阶色圈，叠在院子图上
   ui/                     HTML/CSS 覆盖层：分数、计时、下一颗、锤子、toast、胜负
@@ -95,7 +95,7 @@ src/
   assets/icons/           01-doubao.webp … 10-t800.webp
   assets/tokens/          01.webp … 10.webp（游戏圆片）
   assets/levels/          01-courtyard.webp（院子+画上的玻璃缸）
-  assets/ui/              title.webp（立体字+图标圆片）、hammer.webp（剪枝剪，×3 不烤进图）
+  assets/ui/              title.webp（立体字+图标圆片）、hammer.webp（玩具锤，×3 不烤进图）
 ```
 
 玩法细则只放在 `docs/BRIEF.md`，避免和代码各说各话。
@@ -124,8 +124,8 @@ T-800 的 `10-t800.webp` 由 merge-assets 的端头像 PNG 转换而来。不要
 
 - index.html：viewport-fit=cover，禁止用户缩放。
 - canvas：touch-action none，overscroll-behavior none。
-- HUD 按 390px 宽排：顶栏分数 / 时间 / 下一颗，底栏一把剪枝剪 ×3。
-- 剪枝剪按钮足够大，方便拇指。
+- HUD 按 390px 宽排：顶栏分数 / 时间 / 下一颗，底栏一把玩具锤 ×3。
+- 锤子按钮足够大，方便拇指。
 - 覆盖层用大号按钮和对比度足够的字。
 
 ## 视觉
