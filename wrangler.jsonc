@@ -1,0 +1,104 @@
+// Cloudflare Workers 静态站点配置；JSONC 允许 // 注释，下面只启用本游戏需要的字段。
+// 字段和示例值已按 Wrangler 4.152.0 的 node_modules/wrangler/config-schema.json 核对。
+// 注释掉的示例不会生效；启用时去掉代码行的 //，保留说明，并注意字段之间的逗号。
+// 开始根配置对象：所有顶层字段都属于这个 Worker。
+{
+  // 指向 npm 安装的本地 schema，让编辑器提示字段、类型和拼写错误。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Cloudflare 上的 Worker 名称；使用 merge-models，与项目名称保持一致。
+  "name": "merge-models",
+  // 固定运行时兼容行为；2026-10-01 不晚于本次配置日期 2026-10-26。
+  "compatibility_date": "2026-10-01",
+
+  // 可选：是否开启 <名称>.<账户子域>.workers.dev 访问入口。
+  // 官方默认：没写 routes 时为 true；像我们这样写了 routes 时默认就是 false（只能走自定义域名）。
+  // 想在自定义域名之外再留一个 workers.dev 备用网址，就取消下一行注释。
+  // "workers_dev": true,
+  // 可选：false 表示关闭每个版本的预览 URL；与上面的普通 workers.dev 入口分别控制。
+  // "preview_urls": false,
+  // 可选：自定义 Worker 脚本入口；纯静态游戏无需 main，启用前需创建对应文件。
+  // "main": "worker/index.ts",
+  // 可选：运行时兼容标志列表；空数组表示不额外开启标志，具体标志须查运行时文档。
+  // "compatibility_flags": [],
+
+  // 可选：Worker 可观测性设置；将来添加 Worker 逻辑后，可按需记录调用日志。
+  // "observability": {
+    // 开启可观测性；本示例整体仍被注释，因此目前不会启用。
+    // "enabled": true,
+    // 采样率范围为 0 到 1；0.1 表示采集约 10% 的请求，减少日志量。
+    // "head_sampling_rate": 0.1
+  // 结束 observability 对象，并用逗号连接后续顶层字段。
+  // },
+
+  // 可选：传给 Worker 的普通变量；不会自动成为 Vite 浏览器端变量，也不要在此放密钥。
+  // "vars": {
+    // APP_ENV 是自定义变量名，production 是演示用的环境标识。
+    // "APP_ENV": "production"
+  // 结束 vars 对象；这些变量目前均未启用。
+  // },
+
+  // 可选：按环境覆盖配置；启用后使用 --env staging 才会选择下面的 staging 环境。
+  // "env": {
+    // staging 是自定义环境名称，用于区分测试环境和默认生产环境。
+    // "staging": {
+      // 测试环境使用独立 Worker 名称，便于和正式站点区分。
+      // "name": "merge-models-staging",
+      // 清空测试环境的路由，避免继承下面正式站点的自定义域名。
+      // "routes": [],
+      // 测试环境使用 workers.dev 入口，因此这里示例设为 true。
+      // "workers_dev": true,
+      // vars 不会从顶层自动继承，命名环境需要重新声明自己的变量。
+      // "vars": {
+        // 用 staging 标识测试环境；这里只演示普通字符串，不包含密钥。
+        // "APP_ENV": "staging"
+      // 结束 staging 的 vars 对象。
+      // }
+    // 结束 staging 环境对象；未覆盖的可继承字段继续使用顶层配置。
+    // }
+  // 结束 env 对象；当前整个环境示例均未启用。
+  // },
+
+  // 可选：限制 Worker 执行资源；纯静态托管暂时不需要，启用前需确认套餐支持。
+  // "limits": {
+    // 每次 Worker 调用最多使用 50 毫秒 CPU 时间；不是整个 HTTP 请求的等待时长。
+    // "cpu_ms": 50
+  // 结束 limits 对象。
+  // },
+  // 可选：调整 Worker 计算位置以减少后端访问延迟；本游戏无后端计算，暂不启用。
+  // "placement": {
+    // smart 表示智能放置；此种配置也支持 off，静态资源分发无需依赖它。
+    // "mode": "smart"
+  // 结束 placement 对象。
+  // },
+
+  // 静态资源设置：让 Cloudflare 直接托管 Vite 的构建产物，无需编写 Worker 脚本。
+  "assets": {
+    // 可选：请求找不到文件时的处理方式；本游戏没有前端路由，暂不启用回退。
+    // single-page-application 返回 index.html；404-page 查找 404.html；none 不额外回退。
+    // "not_found_handling": "single-page-application",
+    // 可选：控制 HTML 地址规范化；auto-trailing-slash 根据文件结构决定是否保留末尾 /。
+    // 其它合法值：force-trailing-slash 强制加 /；drop-trailing-slash 去掉 /；none 不做规范化。
+    // "html_handling": "auto-trailing-slash",
+    // 可选：true 让所有请求先执行 Worker；也支持路径数组（如 ["/api/*"]）或 false。
+    // 需要先配置有效的 main；当前只有静态文件，因此不启用此项。
+    // "run_worker_first": true,
+    // 可选：在 Worker 中通过 env.ASSETS.fetch(request) 读取静态资源；有脚本时才需要。
+    // "binding": "ASSETS",
+    // Vite 默认把生产构建输出到 dist；相对于本配置文件，部署前先执行 npm run build。
+    "directory": "./dist"
+  // 结束 assets 对象，下面继续配置访问域名。
+  },
+  // 部署路由列表：这里只声明正式站点的自定义域名；dry-run 不会绑定或修改域名。
+  "routes": [
+    // 开始一条自定义域名配置；同一列表将来可以容纳其它域名。
+    {
+      // 自定义域名填写完整主机名，不带 https://、路径或 /*；正式部署时须有该域名权限。
+      "pattern": "merge-models.tyler4400.com",
+      // true 表示由此 Worker 作为域名源站提供内容，而不是匹配现有源站上的路径路由。
+      "custom_domain": true
+    // 结束 merge-models.tyler4400.com 的域名配置。
+    }
+  // 结束 routes 列表；这是最后一个启用的顶层字段，不加逗号。
+  ]
+// 结束整个 Wrangler 配置对象。
+}

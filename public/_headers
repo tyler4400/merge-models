@@ -1,0 +1,53 @@
+# Cloudflare Workers 静态资源响应头配置：Vite 会把本文件原样复制到 dist/_headers。
+# Cloudflare 解析规则并应用于静态资源响应，本文件本身不会作为静态文件对外提供。
+# 每组第一行是不缩进的 URL 规则，后续行用两个空格缩进，格式为 Header-Name: value。
+# 注释以行首 # 开头；启用下方示例时去掉代码行的 #，保留响应头前的两个空格。
+# 路径中的 * 匹配任意后续字符；多个规则可同时生效，同名头的值会用逗号合并。
+# 本文件不控制自定义 Worker 脚本生成的响应；这种响应需在脚本里自行设置头。
+# 语法参考：https://developers.cloudflare.com/workers/static-assets/headers/
+
+# 全站允许同源页面使用加速度计和陀螺仪，与 vite.config.ts 的 sensorHeaders 保持一致。
+# 第一条是新标准 Permissions-Policy；第二条 Feature-Policy 是它的旧名字，兼容老浏览器。
+# （注释写在规则块上方，不插在缩进的响应头行之间，避免解析歧义。）
+/*
+  Permissions-Policy: accelerometer=(self), gyroscope=(self)
+  Feature-Policy: accelerometer 'self'; gyroscope 'self'
+
+# 已检查 npm run build：dist/assets/ 内所有文件名均含 Vite 内容 hash，没有 public/ 原样素材。
+# 内容变化会产生新 URL，所以此目录可在浏览器缓存一年，并用 immutable 避免重复校验。
+# 将来若把无 hash 的素材放入 public/assets/，必须先缩小此规则范围或移出该目录。
+# 不要再叠加一条同名 Cache-Control 来尝试覆盖，因为多个匹配规则会合并头值。
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 根目录的 HavokPhysics.wasm 文件名没有 hash；缓存一天，之后可重新验证和获取更新。
+# 不使用 immutable，避免升级 Havok 后浏览器长期沿用相同 URL 的旧文件。
+/HavokPhysics.wasm
+  Cache-Control: public, max-age=86400
+
+# 以下仅为学习示例，URL 和响应头都已注释，目前不会生效。
+# 示例：DENY 禁止其它网页用 iframe 嵌入游戏；需要嵌入展示时不要开启。
+# /*
+#   X-Frame-Options: DENY
+
+# 示例：nosniff 让浏览器遵守 Content-Type，不自行猜测文件类型。
+# /*
+#   X-Content-Type-Options: nosniff
+
+# 示例：跨站请求只发送来源站点信息，同源保留完整来源；HTTPS 降级时不发送来源。
+# /*
+#   Referrer-Policy: strict-origin-when-cross-origin
+
+# 示例：允许其它来源跨域读取公开素材；* 不适用于需要携带凭据的跨域请求。
+# /assets/*
+#   Access-Control-Allow-Origin: *
+
+# 示例：匹配版本预览或普通 workers.dev 地址，要求搜索引擎不收录；不影响自定义域名。
+# :version 和 :subdomain 是匹配主机名片段的占位符，不需要替换成真实值。
+# https://:version.:subdomain.workers.dev/*
+#   X-Robots-Tag: noindex
+
+# 示例：若已全站开启 X-Frame-Options，可用“! 头名”移除 /embed/ 下的这个响应头。
+# ! 后必须有一个空格；移除规则仍需缩进，并放在对应 URL 规则下面。
+# /embed/*
+#   ! X-Frame-Options
