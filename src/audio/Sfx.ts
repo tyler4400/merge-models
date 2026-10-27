@@ -1,7 +1,12 @@
-/** Procedural Web Audio: collide, merge, shatter, alarm, win. Unlock on first gesture. */
+/** Recorded samples first, procedural Web Audio fallback. Unlock on first gesture. */
+type SampleName = "collide" | "merge" | "shatter" | "alarm" | "win";
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private unlocked = false;
+  private buffers: Partial<Record<SampleName, AudioBuffer>> = {};
+  private alarmOn = false;
+  private alarmSample: { src: AudioBufferSourceNode; gain: GainNode; stopping: boolean } | null = null;
   private alarm: { timer: number; osc: OscillatorNode | null; gain: GainNode | null } | null = null;
   private lastCollide = 0;
   private lastMerge = 0;
@@ -12,9 +17,48 @@ export class Sfx {
     if (!this.ctx) {
       const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AC();
+      void this.loadSamples(this.ctx);
     }
     if (this.ctx.state === "suspended") void this.ctx.resume();
     this.unlocked = true;
+  }
+
+  private async loadSamples(ctx: AudioContext): Promise<void> {
+    try {
+      const ext = new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? "ogg" : "mp3";
+      const names: SampleName[] = ["collide", "merge", "shatter", "alarm", "win"];
+      await Promise.all(names.map(async (name) => {
+        try {
+          const response = await fetch(`${import.meta.env.BASE_URL}sfx/${name}.${ext}`);
+          if (!response.ok) return;
+          const data = await response.arrayBuffer();
+          // Callbacks also support Safari versions that return no Promise.
+          const buffer = await new Promise<AudioBuffer>((resolve, reject) => {
+            const decoded = ctx.decodeAudioData(data, resolve, reject);
+            if (decoded) void decoded.then(resolve, reject);
+          });
+          this.buffers[name] = buffer;
+          if (name === "alarm" && this.alarmOn) this.setAlarm(true);
+        } catch {
+          /* Keep synthesis available if fetching or decoding fails. */
+        }
+      }));
+    } catch {
+      /* Format detection unavailable: keep synthesis. */
+    }
+  }
+
+  private playSample(ctx: AudioContext, buffer: AudioBuffer, volume: number, rate = 1, voice = false): void {
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    src.buffer = buffer;
+    src.playbackRate.value = rate;
+    gain.gain.value = volume;
+    src.connect(gain).connect(ctx.destination);
+    this.arm(src, [gain], () => {
+      if (voice) this.releaseVoice();
+    });
+    src.start();
   }
 
   private dest(): AudioContext | null {
@@ -54,7 +98,7 @@ export class Sfx {
     );
   }
 
-  /** Short glass-marble clink. Global voice cap + slower gate so piles don't machine-gun. */
+  /** Shared voice cap + slower gate so piles don't machine-gun. */
   collide(impulse: number): void {
     const ctx = this.dest();
     if (!ctx) return;
@@ -64,6 +108,17 @@ export class Sfx {
     if (!this.takeVoice()) return;
     this.lastCollide = now;
 
+    const buffer = this.buffers.collide;
+    if (buffer) {
+      const t = Math.min(1, Math.max(0, (impulse - 2.8) / 6));
+      this.playSample(ctx, buffer, 0.25 + t * 0.15, 0.95 + Math.random() * 0.1, true);
+    } else {
+      this.synthCollide(ctx, impulse);
+    }
+  }
+
+  private synthCollide(ctx: AudioContext, impulse: number): void {
+    const now = ctx.currentTime;
     const t = Math.min(1, Math.max(0, (impulse - 2.8) / 6));
     const dur = 0.07 + t * 0.07;
     const clickDur = 0.02 + t * 0.02;
@@ -119,7 +174,7 @@ export class Sfx {
     }
   }
 
-  /** Short bright glass-combine: high ding + sparkle. Throttled so chains don't stack. */
+  /** Throttled so merge chains don't stack. */
   merge(tier: number): void {
     const ctx = this.dest();
     if (!ctx) return;
@@ -128,6 +183,18 @@ export class Sfx {
     if (!this.takeVoice()) return;
     this.lastMerge = now;
 
+    const buffer = this.buffers.merge;
+    if (buffer) {
+      const level = Math.max(1, Math.min(10, tier));
+      const rate = Math.min(3, 2 ** ((level - 1) * 2 / 12));
+      this.playSample(ctx, buffer, 0.55, rate, true);
+    } else {
+      this.synthMerge(ctx, tier);
+    }
+  }
+
+  private synthMerge(ctx: AudioContext, tier: number): void {
+    const now = ctx.currentTime;
     const t = Math.max(0, Math.min(1, (tier - 1) / 9));
     const vol = 0.09 + t * 0.07;
     const dur = 0.12 + t * 0.08;
@@ -184,13 +251,14 @@ export class Sfx {
   shatter(): void {
     const ctx = this.dest();
     if (!ctx) return;
-    if (!this.takeVoice()) return;
+    const buffer = this.buffers.shatter;
+    if (buffer) this.playSample(ctx, buffer, 0.7);
+    else this.synthShatter(ctx);
+  }
+
+  private synthShatter(ctx: AudioContext): void {
     const now = ctx.currentTime;
-    let left = 0;
-    const done = (): void => {
-      left--;
-      if (left <= 0) this.releaseVoice();
-    };
+    const done = (): void => {};
 
     const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.22, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -206,7 +274,6 @@ export class Sfx {
     g.gain.setValueAtTime(0.18, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
     src.connect(filter).connect(g).connect(ctx.destination);
-    left++;
     this.arm(src, [filter, g], done);
     src.start(now);
     src.stop(now + 0.22);
@@ -219,7 +286,6 @@ export class Sfx {
     pg.gain.setValueAtTime(0.09, now);
     pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
     ping.connect(pg).connect(ctx.destination);
-    left++;
     this.arm(ping, [pg], done);
     ping.start(now);
     ping.stop(now + 0.22);
@@ -232,13 +298,53 @@ export class Sfx {
     pg2.gain.setValueAtTime(0.05, now);
     pg2.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
     ping2.connect(pg2).connect(ctx.destination);
-    left++;
     this.arm(ping2, [pg2], done);
     ping2.start(now);
     ping2.stop(now + 0.16);
   }
 
   setAlarm(on: boolean): void {
+    this.alarmOn = on;
+    if (!on) {
+      this.synthSetAlarm(false);
+      const sample = this.alarmSample;
+      if (sample && !sample.stopping && this.ctx) {
+        sample.stopping = true;
+        const now = this.ctx.currentTime;
+        const volume = sample.gain.gain.value;
+        sample.gain.gain.cancelScheduledValues(now);
+        sample.gain.gain.setValueAtTime(volume, now);
+        sample.gain.gain.linearRampToValueAtTime(0, now + 0.03);
+        sample.src.stop(now + 0.03);
+      }
+      return;
+    }
+    const ctx = this.dest();
+    if (!ctx) return;
+    const buffer = this.buffers.alarm;
+    if (!buffer) {
+      this.synthSetAlarm(true);
+      return;
+    }
+    this.synthSetAlarm(false);
+    // Keep a fading source until ended; rapid off/on never stacks loops.
+    if (this.alarmSample) return;
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    src.buffer = buffer;
+    src.loop = true;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.01);
+    src.connect(gain).connect(ctx.destination);
+    this.alarmSample = { src, gain, stopping: false };
+    this.arm(src, [gain], () => {
+      this.alarmSample = null;
+      if (this.alarmOn) this.setAlarm(true);
+    });
+    src.start();
+  }
+
+  private synthSetAlarm(on: boolean): void {
     const ctx = this.dest();
     if (!ctx) return;
     if (on && !this.alarm) {
@@ -308,14 +414,15 @@ export class Sfx {
   win(): void {
     const ctx = this.dest();
     if (!ctx) return;
-    if (!this.takeVoice()) return;
+    const buffer = this.buffers.win;
+    if (buffer) this.playSample(ctx, buffer, 0.7);
+    else this.synthWin(ctx);
+  }
+
+  private synthWin(ctx: AudioContext): void {
     const now = ctx.currentTime;
     const notes = [523, 659, 784, 1046];
-    let left = notes.length;
-    const done = (): void => {
-      left--;
-      if (left <= 0) this.releaseVoice();
-    };
+    const done = (): void => {};
     notes.forEach((f, i) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
