@@ -2,7 +2,7 @@
 import "./hud.css";
 import { FAIL_LINE_Y, SCREEN, TANK } from "../game/constants";
 import { tierDef, type TierId } from "../game/tiers";
-import titleUrl from "../assets/ui/title.png";
+import titleUrl from "../assets/ui/title.webp";
 
 export type HudHandlers = {
   onStart: () => void;

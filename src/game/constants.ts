@@ -1,12 +1,12 @@
-/** 390x844 phone. Physics box is the painted jar interior of 01-courtyard.png. */
+/** 390×844 手机视图；物理盒按 01-courtyard.webp 的缸内壁对齐，因此转换图片时不能改变尺寸。 */
 
 export const SCREEN = {
   w: 390,
   h: 844,
   hudTop: 118,
-  // Measured on 01-courtyard.png (1536×1024), portrait window 473×1024
-  // centered on the jar (x 519–992) mapped 1:1 onto the 390×844 view.
-  // Inner glass faces ≈ src x 572–938, rim ≈ y 200, wood top ≈ y 852.
+  // 基于 01-courtyard.webp（1536×1024）测量：以缸为中心裁取 473×1024 竖窗
+  // （原图 x 519–992）映射至 390×844 视图，保持画面与隐形物理墙对齐。
+  // 玻璃内壁约在原图 x 572–938，缸口约 y 200，木底座顶部约 y 852。
   jarTop: 165,
   jarBottom: 702,
   jarInnerW: 302,

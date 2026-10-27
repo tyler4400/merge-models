@@ -1,15 +1,14 @@
 {
   "name": "merge-models",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host --port 5175",
     "build": "tsc && vite build",
     "preview": "vite preview --host --port 5175",
     "deploy": "wrangler deploy",
-    "test": "node --experimental-strip-types --test src/game/failCheck.test.ts",
-    "postinstall": "node scripts/copy-havok.mjs"
+    "test": "node --experimental-strip-types --test src/game/failCheck.test.ts"
   },
   "dependencies": {
     "@babylonjs/core": "^8.28.2",

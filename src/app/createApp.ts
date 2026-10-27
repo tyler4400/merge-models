@@ -33,7 +33,9 @@ export async function createApp(
   scene.environmentTexture = makeDayEnv(scene);
   scene.environmentIntensity = 0.9;
 
-  const havok = await HavokPhysics({ locateFile: () => "/HavokPhysics.wasm" });
+  // Vite 根据包内 new URL 产出带 hash 的 wasm，放在 /assets/ 下。
+  // 内容变化会更新 URL，因此可复用该目录的一年 immutable 缓存规则。
+  const havok = await HavokPhysics();
   const plugin = new HavokPlugin(true, havok);
   scene.enablePhysics(new Vector3(0, GRAVITY_Y, 0), plugin);
 

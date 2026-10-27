@@ -1,5 +1,7 @@
 # 合成大模型 demo assets — sources
 
+游戏实际打包的是同名 .webp（由这些 PNG 以质量 85 转换、尺寸不变）。
+
 
 > **T-800 更正：** 游戏使用的 `10-t800.png` 是端头像（ICON HEAD，与 `10-t800-icon.png` 相同），不是下表里那张 Tekniska museet 博物馆静物照。
 

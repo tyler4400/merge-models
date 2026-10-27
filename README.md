@@ -56,7 +56,7 @@ cp -R .agents/skills/asset-gen .cursor/skills/asset-gen
 
 `build` 脚本跑 tsc + vite，只当编译门禁，不是「能玩」的证明。
 
-Havok wasm 放在 `public/HavokPhysics.wasm`，运行时用 locateFile 加载 `/HavokPhysics.wasm`（包的 exports 会挡住 url import）。
+Havok 直接用 `await HavokPhysics()` 初始化。Vite 根据包内的 `new URL` 将 wasm 输出为 `dist/assets/HavokPhysics-<hash>.wasm`，内容变化会更新 URL，因此适用 `/assets/*` 的一年 immutable 缓存。开发模式通过 `optimizeDeps.exclude` 排除 `@babylonjs/havok`：预打包会把依赖移到 `node_modules/.vite/deps` 并改变 `import.meta.url`，导致 wasm 相对路径失效；排除后从包原位置加载。
 
 ## 怎么玩
 
@@ -92,9 +92,10 @@ src/
     TokenLayer.ts         2D 圆片层：图标铺满 + 分阶色圈，叠在院子图上
   ui/                     HTML/CSS 覆盖层：分数、计时、下一颗、锤子、toast、胜负
   audio/Sfx.ts            Web Audio 程序音：碰撞、合成、碎裂、警报、胜利
-  assets/icons/           01-doubao.png … 10-t800.png
-  assets/levels/          01-courtyard.png（院子+画上的玻璃缸）
-  assets/ui/              title.png（立体字+图标圆片）、hammer.png（剪枝剪，×3 不烤进图）
+  assets/icons/           01-doubao.webp … 10-t800.webp
+  assets/tokens/          01.webp … 10.webp（游戏圆片）
+  assets/levels/          01-courtyard.webp（院子+画上的玻璃缸）
+  assets/ui/              title.webp（立体字+图标圆片）、hammer.webp（剪枝剪，×3 不烤进图）
 ```
 
 玩法细则只放在 `docs/BRIEF.md`，避免和代码各说各话。
@@ -103,19 +104,19 @@ src/
 
 | 游戏内 | 文件 | 来源 |
 |---|---|---|
-| 1 豆包 | `src/assets/icons/01-doubao.png` | 豆包官网 apple-touch |
-| 2 元宝 | `src/assets/icons/02-yuanbao.png` | 腾讯元宝标（LobeHub SVG 转 512） |
-| 3 Qwen | `src/assets/icons/03-qwen.png` | 通义官方 lockup 裁切 |
-| 4 Kimi | `src/assets/icons/04-kimi.png` | Moonshot 官方 Branding Guide 圆形图标 |
-| 5 DeepSeek | `src/assets/icons/05-deepseek.png` | Wikimedia DeepSeek-icon.svg |
-| 6 Gemini | `src/assets/icons/06-gemini.png` | Wikimedia Google Gemini icon 2025 |
-| 7 Grok | `src/assets/icons/07-grok.png` | xAI 官方 brand-kit logomark |
-| 8 ChatGPT | `src/assets/icons/08-chatgpt.png` | Wikimedia ChatGPT-Logo.svg |
-| 9 Claude | `src/assets/icons/09-claude.png` | Wikimedia Claude AI symbol |
-| 10 T-800 | `src/assets/icons/10-t800.png` | 端头像（ICON HEAD），不是博物馆老照片 |
+| 1 豆包 | `src/assets/icons/01-doubao.webp` | 豆包官网 apple-touch |
+| 2 元宝 | `src/assets/icons/02-yuanbao.webp` | 腾讯元宝标（LobeHub SVG 转 512） |
+| 3 Qwen | `src/assets/icons/03-qwen.webp` | 通义官方 lockup 裁切 |
+| 4 Kimi | `src/assets/icons/04-kimi.webp` | Moonshot 官方 Branding Guide 圆形图标 |
+| 5 DeepSeek | `src/assets/icons/05-deepseek.webp` | Wikimedia DeepSeek-icon.svg |
+| 6 Gemini | `src/assets/icons/06-gemini.webp` | Wikimedia Google Gemini icon 2025 |
+| 7 Grok | `src/assets/icons/07-grok.webp` | xAI 官方 brand-kit logomark |
+| 8 ChatGPT | `src/assets/icons/08-chatgpt.webp` | Wikimedia ChatGPT-Logo.svg |
+| 9 Claude | `src/assets/icons/09-claude.webp` | Wikimedia Claude AI symbol |
+| 10 T-800 | `src/assets/icons/10-t800.webp` | 端头像（ICON HEAD），不是博物馆老照片 |
 | 出处全文 | `docs/ASSET_SOURCES.md` | 从 merge-assets/SOURCES.md 拷来 |
 
-T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头像。不要用 Tekniska museet 那张旧静物照。
+T-800 的 `10-t800.webp` 由 merge-assets 的端头像 PNG 转换而来。不要用 Tekniska museet 那张旧静物照。
 
 演示 / 编辑用途。商标仍归各权利人。
 
@@ -135,7 +136,9 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 
 ## 现状
 
-院子和罐子是 `01-courtyard.png` 的 HTML 图，物理墙隐形。圆片画在 2D overlay 上，滚动时图标跟着转。碰撞音是玻璃珠互撞，停稳的堆不再连响。
+0.4.0：23 张被引用的 PNG 已以质量 85 转为同名 WebP，像素尺寸及透明通道保持不变，避免影响物理盒与画面对齐；Havok wasm 由 Vite 统一产出一份带 hash 的资源。
+
+院子和罐子是 `01-courtyard.webp` 的 HTML 图，物理墙隐形。圆片画在 2D overlay 上，滚动时图标跟着转。碰撞音是玻璃珠互撞，停稳的堆不再连响。
 
 ## 自动部署
 
@@ -150,7 +153,7 @@ T-800 用 merge-assets 里的 10-t800.png（与 10-t800-icon.png 相同）端头
 | `wrangler.jsonc` | 固定兼容日期 `2026-10-01`，声明静态资源目录与自定义域名；其它字段为未启用的学习示例 |
 | `public/_headers` → `dist/_headers` | Cloudflare 读取的响应头规则；保持手机传感器策略与 Vite 开发环境一致 |
 | `dist/assets/*` | 当前构建文件均带内容 hash，浏览器缓存一年并启用 immutable；以后不要混入无 hash 素材 |
-| `dist/HavokPhysics.wasm` | 无 hash 的固定文件名，缓存一天，便于 Havok 升级后更新 |
+| `dist/assets/HavokPhysics-<hash>.wasm` | Vite 根据包内 URL 产出唯一一份 wasm，沿用 `/assets/*` 的一年 immutable 缓存 |
 
 ### 现有容器部署
 
