@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host --port 5175",
     "deploy": "wrangler deploy",
-    "test": "node --experimental-strip-types --test src/game/failCheck.test.ts"
+    "test": "node --experimental-strip-types --test src/game/*.test.ts"
   },
   "dependencies": {
     "@babylonjs/core": "^8.28.2",

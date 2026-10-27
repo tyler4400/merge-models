@@ -1,0 +1,200 @@
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { TILT } from "./constants.ts";
+import { TiltSensor } from "./tilt.ts";
+
+let now = 0;
+let screenDeg = 0;
+let events: EventTarget;
+const originals = new Map<string, PropertyDescriptor | undefined>();
+function globalValue(name: string, value: unknown): void {
+  if (!originals.has(name)) originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+  Object.defineProperty(globalThis, name, { value, configurable: true });
+}
+function send(type: string, props: object): void {
+  const e = new Event(type);
+  Object.assign(e, props);
+  events.dispatchEvent(e);
+}
+function motion(x: number | null, y: number | null): void {
+  send("devicemotion", { accelerationIncludingGravity: { x, y } });
+}
+function near(actual: number, expected: number, epsilon = 1e-7): void {
+  assert.ok(Math.abs(actual - expected) < epsilon, `${actual} != ${expected}`);
+}
+function angle(sensor: TiltSensor, deg: number): void {
+  sensor.tick(3);
+  near(sensor.theta, deg * Math.PI / 180);
+}
+
+beforeEach(() => {
+  now = 0;
+  screenDeg = 0;
+  events = new EventTarget();
+  globalValue("window", Object.assign(events, {
+    screen: { orientation: { get angle() { return screenDeg; } } },
+    orientation: 0,
+    setTimeout,
+  }));
+  globalValue("navigator", { userAgent: "Android", platform: "Linux", maxTouchPoints: 1 });
+  globalValue("performance", { now: () => now });
+  globalValue("Accelerometer", undefined);
+  globalValue("DeviceMotionEvent", undefined);
+  globalValue("DeviceOrientationEvent", undefined);
+});
+afterEach(() => {
+  for (const [key, descriptor] of originals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  originals.clear();
+});
+
+describe("TiltSensor", () => {
+  it("无传感器桌面保持零倾角", () => {
+    globalValue("navigator", { userAgent: "Desktop" });
+    const sensor = new TiltSensor();
+    sensor.startFromGesture();
+    angle(sensor, 0);
+  });
+
+  for (const deg of [0, 90, 180, 270, -90]) {
+    it(`屏幕 ${deg}°：Android 左右倾方向一致`, () => {
+      screenDeg = deg;
+      const sensor = new TiltSensor();
+      for (const lean of [-30, 30]) {
+        const theta = lean * Math.PI / 180;
+        const a = deg * Math.PI / 180;
+        const sx = 9.81 * Math.sin(theta);
+        const sy = -9.81 * Math.cos(theta);
+        // 屏幕重力逆旋转回设备轴，再变为 Android 支撑力。
+        motion(-(sx * Math.cos(a) + sy * Math.sin(a)), -(-sx * Math.sin(a) + sy * Math.cos(a)));
+        angle(sensor, lean);
+      }
+    });
+  }
+
+  it("旧 window.orientation 支持 ±90° 和 180°", () => {
+    Object.defineProperty(window, "screen", { value: undefined });
+    const sensor = new TiltSensor();
+    for (const [deg, x, y] of [[90, 8.495709, 4.905], [-90, -8.495709, -4.905], [180, 4.905, -8.495709]]) {
+      Object.defineProperty(window, "orientation", { value: deg, configurable: true });
+      motion(x, y);
+      sensor.tick(3);
+      near(sensor.theta, Math.PI / 6, 1e-6);
+    }
+  });
+
+  it("死区、45°上限及指数平滑生效", () => {
+    const sensor = new TiltSensor();
+    motion(-0.2, 9.8);
+    angle(sensor, 0);
+    motion(-9.81, 0);
+    sensor.tick(TILT.smoothSec);
+    near(sensor.theta, Math.PI / 4 * (1 - Math.exp(-1)));
+    angle(sensor, 45);
+    motion(9.81, 0);
+    angle(sensor, -45);
+    motion(0, 9.81);
+    angle(sensor, 0);
+  });
+
+  it("近平放保持目标且不让姿态回退抢占；无效输入不污染状态", () => {
+    const sensor = new TiltSensor();
+    motion(-4.905, 9.81 * Math.cos(Math.PI / 6));
+    angle(sensor, 30);
+    now = 1000;
+    motion(0.1, 0.1);
+    send("deviceorientation", { beta: 45, gamma: -60 });
+    motion(null, 9.8);
+    motion(NaN, 9.8);
+    angle(sensor, 30);
+  });
+
+  it("冻结期间拒绝新目标，解冻后接受新样本", () => {
+    const sensor = new TiltSensor();
+    motion(-9.81, 0);
+    sensor.freeze(1);
+    motion(9.81, 0);
+    sensor.tick(0.5);
+    assert.ok(sensor.theta > 0);
+    sensor.tick(0.5);
+    motion(9.81, 0);
+    angle(sensor, -45);
+  });
+
+  it("运动数据优先，静默后允许姿态回退", () => {
+    const sensor = new TiltSensor();
+    motion(0, 9.81);
+    send("deviceorientation", { beta: 45, gamma: 90 });
+    angle(sensor, 0);
+    now = TILT.sourceStaleMs + 1;
+    send("deviceorientation", { beta: 45, gamma: 90 });
+    angle(sensor, 45);
+    motion(0, 9.81);
+    angle(sensor, 0);
+  });
+
+  for (const [screen, beta, gamma] of [[0, 60, 90], [90, 30, -90], [-90, -30, 90], [180, -60, -90]]) {
+    it(`姿态回退在屏幕 ${screen}° 时正确还原右倾30°`, () => {
+      screenDeg = screen;
+      const sensor = new TiltSensor();
+      send("deviceorientation", { beta, gamma });
+      angle(sensor, 30);
+      send("deviceorientation", { beta: 0, gamma: 0 });
+      angle(sensor, 30);
+    });
+  }
+
+  it("通用 Accelerometer 回退保留，运动数据到来后优先", () => {
+    let reading = () => {};
+    let error = () => {};
+    globalValue("Accelerometer", class {
+      x = -9.81;
+      y = 0;
+      start() {}
+      addEventListener(type: string, fn: () => void) {
+        if (type === "reading") reading = fn;
+        else error = fn;
+      }
+    });
+    const sensor = new TiltSensor();
+    reading();
+    angle(sensor, 45);
+    motion(0, 9.81);
+    reading();
+    angle(sensor, 0);
+    now = TILT.sourceStaleMs + 1;
+    error();
+    send("deviceorientation", { beta: 45, gamma: -90 });
+    angle(sensor, -45);
+  });
+
+  it("iOS 手势同步申请两类权限，使用相反运动符号", async () => {
+    globalValue("navigator", { userAgent: "iPhone" });
+    let requests = 0;
+    const permission = { requestPermission: async () => { requests++; return "granted"; } };
+    globalValue("DeviceMotionEvent", permission);
+    globalValue("DeviceOrientationEvent", permission);
+    const sensor = new TiltSensor();
+    motion(9.81, 0);
+    angle(sensor, 0);
+    sensor.startFromGesture();
+    assert.equal(requests, 2);
+    await new Promise((resolve) => setImmediate(resolve));
+    motion(4.905, -9.81 * Math.cos(Math.PI / 6));
+    angle(sensor, 30);
+    sensor.startFromGesture();
+    assert.equal(requests, 2);
+  });
+
+  it("iOS 权限请求挂起时超时后仍监听", async () => {
+    globalValue("navigator", { userAgent: "iPad" });
+    globalValue("DeviceMotionEvent", { requestPermission: () => new Promise(() => {}) });
+    const sensor = new TiltSensor();
+    sensor.startFromGesture();
+    await new Promise((resolve) => setTimeout(resolve, TILT.iosPermissionMs + 30));
+    motion(9.81, 0);
+    angle(sensor, 45);
+  });
+});

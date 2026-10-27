@@ -53,9 +53,9 @@ export const REST = {
 
 export const PHYS = {
   ballRestitution: 0.28,
-  ballFriction: 0.58,
+  ballFriction: 0.4,
   wallRestitution: 0.06,
-  wallFriction: 0.6,
+  wallFriction: 0.4,
   linearDamping: 0.1,
   angularDamping: 0.08,
   zSpring: 52,
@@ -73,6 +73,23 @@ export const TIME_BONUS_PER_SEC = 8;
 export const T800_PAIR_BONUS = 5000;
 
 export const GRAVITY_Y = -24;
+
+export const TILT = {
+  deadzoneDeg: 3, // 小于此角度视为竖直
+  smoothSec: 0.1, // 倾角指数平滑时间常数（秒）
+  maxDeg: 45, // 最大游戏倾角（度）
+  minPlaneAccel: 3, // 屏幕平面重力过小时保持目标角（m/s²）
+  wakeDeltaDeg: 1.5, // 相对上次唤醒的角度变化阈值（度）
+  wakeIntervalSec: 0.5, // 持续倾斜时的唤醒间隔（秒）
+  wakeImpulsePerMass: 0.001, // 向下唤醒冲量除以质量（m/s）
+  failGraceDeg: 15, // 启用失败宽限的倾角（度）
+  failHoldScale: 2, // 大倾角时失败等待时长倍数
+  sourceStaleMs: 800, // 主传感器静默多久后允许回退（毫秒）
+  iosPermissionMs: 300, // iOS 权限等待上限，保留原超时（毫秒）
+  earthGravity: 9.81, // 姿态回退换算为重力加速度（m/s²）
+  iosMotionSign: 1, // iOS Safari 历史上直接报告重力方向，需真机确认
+  standardAccelSign: -1, // Android/通用传感器报告支撑加速度，取反得到重力
+} as const;
 
 export const CAMERA = {
   targetY: (VIEW.yMin + VIEW.yMax) / 2,

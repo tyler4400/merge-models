@@ -6,7 +6,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { FAIL_LINE_Y } from "./constants";
-import { tickFail, type FailSample } from "./failCheck";
+import { tickFail, type FailOptions, type FailSample } from "./failCheck";
 import type { Ball } from "./Ball";
 
 function dashTex(scene: Scene): DynamicTexture {
@@ -55,7 +55,7 @@ export class FailLine {
     this.mat = mat;
   }
 
-  tick(dt: number, balls: readonly Ball[]): { warn: boolean; failed: boolean } {
+  tick(dt: number, balls: readonly Ball[], opts: FailOptions = {}): { warn: boolean; failed: boolean } {
     const samples: FailSample[] = balls.map((b) => {
       let vy = 0;
       try {
@@ -73,7 +73,7 @@ export class FailLine {
         vy,
       };
     });
-    const { warn, failed, clocks } = tickFail(samples, dt);
+    const { warn, failed, clocks } = tickFail(samples, dt, opts);
     for (let i = 0; i < balls.length; i++) balls[i]!.failClock = clocks[i]!;
 
     this.warning = warn;

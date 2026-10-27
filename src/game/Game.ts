@@ -8,7 +8,7 @@ import { Sfx } from "../audio/Sfx";
 import { Hud } from "../ui/hud";
 import { Ball } from "./Ball";
 import { TokenLayer } from "./TokenLayer";
-import { DROP, GRAVITY_Y, MERGE_POP, REST, VIEW } from "./constants";
+import { DROP, GRAVITY_Y, MERGE_POP, REST, TILT, VIEW } from "./constants";
 import { FailLine } from "./failLine";
 import { HammerStock, ShatterFx, canSmash } from "./hammer";
 import { planMerge } from "./merge";
@@ -57,6 +57,8 @@ export class Game {
   private inputBound = false;
   private lastPointer: PointerEvent | null = null;
   readonly tilt = new TiltSensor();
+  private lastWakeTheta = 0;
+  private wakeClock = 0;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
     this.scene = scene;
@@ -141,9 +143,17 @@ export class Game {
     const dt = Math.min(dtMs / 1000, 0.05);
     this.tilt.tick(dt);
     const live = this.phase === "playing" || this.phase === "hammerAim";
-    const gx = live ? this.tilt.gx : 0;
-    this.plugin.setGravity(new Vector3(gx, GRAVITY_Y, 0));
-    if (gx !== 0) this.wakePile(gx);
+    const theta = live ? this.tilt.theta : 0;
+    const gravity = Math.abs(GRAVITY_Y);
+    this.plugin.setGravity(new Vector3(gravity * Math.sin(theta), -gravity * Math.cos(theta), 0));
+    this.wakeClock += dt;
+    if (Math.abs(theta - this.lastWakeTheta) > TILT.wakeDeltaDeg * Math.PI / 180 ||
+      (theta !== 0 && this.wakeClock >= TILT.wakeIntervalSec)) {
+      // 回到竖直或退出游戏时也唤醒一次，让球适应恢复后的重力。
+      this.wakePile();
+      this.lastWakeTheta = theta;
+      this.wakeClock = 0;
+    }
     this.shatter.tick(dt);
     this.stepMergeFx(dt);
     if (this.smashLock > 0) this.smashLock = Math.max(0, this.smashLock - dt);
@@ -179,7 +189,9 @@ export class Game {
     this.flushMerges();
 
     if (this.phase === "playing" || this.phase === "hammerAim") {
-      const { warn, failed } = this.fail.tick(dt, this.balls);
+      const { warn, failed } = this.fail.tick(dt, this.balls, {
+        holdScale: Math.abs(theta) >= TILT.failGraceDeg * Math.PI / 180 ? TILT.failHoldScale : 1,
+      });
       this.hud.setWarn(warn);
       this.sfx.setAlarm(warn);
       if (failed) this.lose();
@@ -200,13 +212,13 @@ export class Game {
     this.hud.setHammers(this.hammers.left, true);
   }
 
-  /** Havok sleeps settled bodies; world gravity X alone will not start a pile sliding. */
-  private wakePile(gx: number): void {
+  /** PhysicsBody 无显式 wake API；极小向下冲量只用于唤醒，不叠加横向力。 */
+  private wakePile(): void {
     for (const ball of this.balls) {
       if (ball.held || ball.merging || !ball.body) continue;
       try {
         const p = ball.mesh.getAbsolutePosition();
-        ball.body.applyForce(new Vector3(gx * ball.mass, 0, 0), p);
+        ball.body.applyImpulse(new Vector3(0, -TILT.wakeImpulsePerMass * ball.mass, 0), p);
       } catch {
         /* body gone */
       }
@@ -231,6 +243,8 @@ export class Game {
     this.pendingSettledFor = 0;
     this.freeze = false;
     this.timing = false;
+    this.lastWakeTheta = 0;
+    this.wakeClock = 0;
     this.elapsed = 0;
     if (full) {
       this.score = 0;
