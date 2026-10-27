@@ -69,7 +69,7 @@ Havok 直接用 `await HavokPhysics()` 初始化。Vite 根据包内的 `new URL
 
 桌面：A / D 或方向键或鼠标移动；点击 / 空格投放；S 模拟摇晃（强度 0.8，共用两秒冷却）。
 手机：手指拖动手持球，松手投放。画布禁止滚动和缩放。
-点击后在点击处的 X 下落；倾斜手机可改变缸内重力方向，最大约 45°，重力大小保持 24。
+点击后在点击处的 X 下落；倾斜手机可改变缸内重力方向，最大约 35°，重力大小保持 24。
 用力往返晃手机可让全缸已投放的球沿共用方向向上弹起，再反向横晃；可以飞出缸口，落回缸内继续合成，落在缸外则碎裂销毁，仅对局和锤子瞄准阶段可触发摇晃。
 
 音频在第一次手势时解锁。
@@ -187,7 +187,7 @@ T-800 的 `10-t800.webp` 由 merge-assets 的端头像 PNG 转换而来。不要
 | `SHAKE.lateralRatio` | 0.7（每球随机正负）→ 0.45（全缸共用方向） |
 | `SHAKE.minPeaks` | 3 → 2 |
 | `SHAKE.failPauseSec` | 2.5 → 3 |
-| `PHYS.ballFriction` / `PHYS.wallFriction` | 0.4 → 0.2 |
+| `PHYS.ballFriction` / `PHYS.wallFriction` | 0.4 → 0.35 |
 | `SHAKE.thresholdMs2` / `minReversals` / `cooldownSec` | 保持 17 / 2 / 2 |
 | `SHAKE.jitter` / `angleJitterDeg` | 新增 0.15 / 8° |
 | `SHAKE.sloshEnabled` / `sloshDelayMs` / `sloshRatio` | 新增 true / 120ms / 0.6 |

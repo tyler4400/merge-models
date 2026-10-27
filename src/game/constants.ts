@@ -54,9 +54,9 @@ export const REST = {
 
 export const PHYS = {
   ballRestitution: 0.28,
-  ballFriction: 0.3,
+  ballFriction: 0.35,
   wallRestitution: 0.06,
-  wallFriction: 0.3,
+  wallFriction: 0.35,
   linearDamping: 0.1,
   angularDamping: 0.08,
   zSpring: 52,
@@ -84,7 +84,7 @@ export const MOTION = {
 export const TILT = {
   deadzoneDeg: 3, // 小于此角度视为竖直
   smoothSec: 0.1, // 倾角指数平滑时间常数（秒）
-  maxDeg: 45, // 最大游戏倾角（度）
+  maxDeg: 35, // 最大游戏倾角（度）
   minPlaneAccel: 3, // 屏幕平面重力过小时保持目标角（m/s²）
   wakeDeltaDeg: 1.5, // 相对上次唤醒的角度变化阈值（度）
   wakeIntervalSec: 0.5, // 持续倾斜时的唤醒间隔（秒）

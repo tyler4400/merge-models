@@ -160,16 +160,16 @@ describe("TiltSensor", () => {
     }
   });
 
-  it("死区、45°上限及指数平滑生效", () => {
+  it("死区、maxDeg 上限及指数平滑生效", () => {
     const sensor = new TiltSensor();
     motion(-0.2, 9.8);
     angle(sensor, 0);
     motion(-9.81, 0);
     sensor.tick(TILT.smoothSec);
-    near(sensor.theta, Math.PI / 4 * (1 - Math.exp(-1)));
-    angle(sensor, 45);
+    near(sensor.theta, (TILT.maxDeg * Math.PI / 180) * (1 - Math.exp(-1)));
+    angle(sensor, TILT.maxDeg);
     motion(9.81, 0);
-    angle(sensor, -45);
+    angle(sensor, -TILT.maxDeg);
     motion(0, 9.81);
     angle(sensor, 0);
   });
@@ -195,7 +195,7 @@ describe("TiltSensor", () => {
     assert.ok(sensor.theta > 0);
     sensor.tick(0.5);
     motion(9.81, 0);
-    angle(sensor, -45);
+    angle(sensor, -TILT.maxDeg);
   });
 
   it("运动数据优先，静默后允许姿态回退", () => {
@@ -205,7 +205,7 @@ describe("TiltSensor", () => {
     angle(sensor, 0);
     now = TILT.sourceStaleMs + 1;
     send("deviceorientation", { beta: 45, gamma: 90 });
-    angle(sensor, 45);
+    angle(sensor, TILT.maxDeg);
     motion(0, 9.81);
     angle(sensor, 0);
   });
@@ -242,7 +242,7 @@ describe("TiltSensor", () => {
     sensor.tick(0);
     assert.equal(starts, 1);
     sensors[0].dispatchEvent(new Event("reading"));
-    angle(sensor, 45);
+    angle(sensor, TILT.maxDeg);
     motion(0, 9.81);
     assert.equal(stops, 1);
     assert.equal(sensor.getDiagnostics().genericActive, false);
@@ -258,7 +258,7 @@ describe("TiltSensor", () => {
     sensors[2].dispatchEvent(new Event("error"));
     assert.match(sensor.getDiagnostics().lastError!.message, /Accelerometer error/);
     send("deviceorientation", { beta: 45, gamma: -90 });
-    angle(sensor, -45);
+    angle(sensor, -TILT.maxDeg);
     sensor.dispose();
   });
 
@@ -287,7 +287,7 @@ describe("TiltSensor", () => {
     sensor.startFromGesture();
     await new Promise((resolve) => setTimeout(resolve, TILT.iosPermissionMs + 30));
     motion(9.81, 0);
-    angle(sensor, 45);
+    angle(sensor, TILT.maxDeg);
   });
 });
 
